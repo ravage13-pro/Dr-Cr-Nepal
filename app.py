@@ -196,16 +196,7 @@ st.markdown("""
 # ==============================================================================
 DEFAULT_COLUMNS = ["ID", "Date", "Description", "Category", "Type", "Amount"]
 
-MOCK_TRANSACTIONS = [
-    {"ID": "tx-1001", "Date": "2026-05-10", "Description": "Client Milestone Payment: Website Redesign", "Category": "Services", "Type": "Credit", "Amount": 2500.00},
-    {"ID": "tx-1002", "Date": "2026-05-11", "Description": "Monthly Coworking Office Rent", "Category": "Office Rent", "Type": "Debit", "Amount": 450.00},
-    {"ID": "tx-1003", "Date": "2026-05-12", "Description": "Vercel & Figma Team Subscriptions", "Category": "Software", "Type": "Debit", "Amount": 89.00},
-    {"ID": "tx-1004", "Date": "2026-05-14", "Description": "Retainer Invoice: UX Strategy Consulting", "Category": "Services", "Type": "Credit", "Amount": 1200.00},
-    {"ID": "tx-1005", "Date": "2026-05-15", "Description": "Paper, Notebooks, and Desk Supplies", "Category": "Supplies", "Type": "Debit", "Amount": 45.50},
-    {"ID": "tx-1006", "Date": "2026-05-16", "Description": "LinkedIn Ads Lead Gen Campaign", "Category": "Marketing", "Type": "Debit", "Amount": 300.00},
-    {"ID": "tx-1007", "Date": "2026-05-17", "Description": "Contractor Payout: Technical SEO Audit", "Category": "Consulting", "Type": "Debit", "Amount": 600.00},
-    {"ID": "tx-1008", "Date": "2026-05-18", "Description": "Project Milestone 2: Backend Development", "Category": "Services", "Type": "Credit", "Amount": 3200.00},
-]
+MOCK_TRANSACTIONS = []
 
 CATEGORIES = [
     "Services", 
@@ -244,7 +235,7 @@ if "mode" not in st.session_state:
 
 # Set up mock transactions in session state if they aren't initialized yet
 if "demo_df" not in st.session_state:
-    st.session_state.demo_df = pd.DataFrame(MOCK_TRANSACTIONS)
+    st.session_state.demo_df = pd.DataFrame(columns=DEFAULT_COLUMNS)
 
 # Cache clear helper to force read fresh gsheets data
 def force_refresh():
