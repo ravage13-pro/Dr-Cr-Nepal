@@ -7,6 +7,7 @@ import datetime
 import uuid
 import altair as alt
 from streamlit_gsheets import GSheetsConnection
+import db_logic
 
 # ==============================================================================
 # PAGE CONFIGURATION & AESTHETIC THEME INJECTION
@@ -189,7 +190,7 @@ st.markdown("""
         box-shadow: 0 6px 20px rgba(79, 70, 229, 0.3);
     }
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 
 # ==============================================================================
@@ -247,7 +248,6 @@ if "last_active_day_npt" not in st.session_state:
     st.session_state.last_active_day_npt = current_npt_date
 
 if st.session_state.last_active_day_npt != current_npt_date:
-    # A new day in Nepal Time (NPT) has started!
     # Clear Sandbox/Demo memory
     st.session_state.demo_df = pd.DataFrame(columns=DEFAULT_COLUMNS)
     # Clear Streamlit cache to sync fresh data
@@ -263,8 +263,6 @@ def force_refresh():
 def clean_pdf_text(text):
     if text is None:
         return ""
-    # Encode to latin-1 with 'replace' to safely handle emojis, smart quotes, Nepalese Unicode, etc.
-    # Emojis/non-latin1 will be replaced with '?' instead of crashing the PDF compilation!
     return str(text).encode('latin-1', 'replace').decode('latin-1')
 
 def create_pdf_report_safe(df_day, selected_date, opening_bal, total_cr, total_dr, closing_bal):
@@ -273,7 +271,6 @@ def create_pdf_report_safe(df_day, selected_date, opening_bal, total_cr, total_d
     import io
     import traceback
     
-    # Redirect stdout and stderr temporarily to silence any console prints or warning leaks
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     sys.stdout = io.StringIO()
@@ -282,13 +279,10 @@ def create_pdf_report_safe(df_day, selected_date, opening_bal, total_cr, total_d
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            # Call actual PDF generation
             res = create_pdf_report(df_day, selected_date, opening_bal, total_cr, total_dr, closing_bal)
             return res
     except Exception as e:
-        # Print traceback to the standard output/error so developers/automated tests see the actual issue
         traceback.print_exc(file=old_stderr)
-        # Fallback to an empty statement in case of critical rendering failures
         return b""
     finally:
         sys.stdout = old_stdout
@@ -304,11 +298,9 @@ def create_pdf_report(df_day, selected_date, opening_bal, total_cr, total_dr, cl
         pdf.set_margins(15, 20, 15)
         pdf.add_page()
         
-        # PDF Header styling (Custom design)
-        pdf.set_fill_color(79, 70, 229) # Premium Indigo #4f46e5 (RGB: 79, 70, 229)
+        pdf.set_fill_color(79, 70, 229) 
         pdf.rect(0, 0, 210, 45, 'F')
         
-        # Title and Metadata
         pdf.set_y(10)
         pdf.set_text_color(255, 255, 255)
         pdf.set_font('Helvetica', 'B', 22)
@@ -318,47 +310,41 @@ def create_pdf_report(df_day, selected_date, opening_bal, total_cr, total_dr, cl
         pdf.set_font('Helvetica', 'I', 9)
         pdf.cell(0, 5, f"Statement Date: {selected_date.strftime('%A, %B %d, %Y')}", ln=1, align='C')
         
-        # Add spacing after banner
         pdf.set_y(52)
-        pdf.set_text_color(15, 23, 42) # Slate 900
+        pdf.set_text_color(15, 23, 42) 
         
-        # Business Summary Section
         pdf.set_font('Helvetica', 'B', 13)
         pdf.cell(0, 8, "1. Executive Summary Table", ln=1)
         pdf.ln(2)
         
-        # Render Summary Table
         pdf.set_font('Helvetica', 'B', 9.5)
-        pdf.set_fill_color(241, 245, 249) # Light gray
-        pdf.set_text_color(71, 85, 105) # Slate 600
+        pdf.set_fill_color(241, 245, 249) 
+        pdf.set_text_color(71, 85, 105) 
         
         pdf.cell(45, 8, "Opening Balance", 1, 0, 'C', True)
         pdf.cell(45, 8, "Daily Inflows (CR)", 1, 0, 'C', True)
         pdf.cell(45, 8, "Daily Outflows (DR)", 1, 0, 'C', True)
         pdf.cell(45, 8, "Closing Balance", 1, 1, 'C', True)
         
-        # Values
         pdf.set_font('Helvetica', 'B', 11)
-        pdf.set_text_color(15, 23, 42) # Slate 900
+        pdf.set_text_color(15, 23, 42) 
         pdf.cell(45, 10, f"Rs. {opening_bal:,.2f}", 1, 0, 'C')
-        pdf.set_text_color(16, 185, 129) # Green
+        pdf.set_text_color(16, 185, 129) 
         pdf.cell(45, 10, f"Rs. {total_cr:,.2f}", 1, 0, 'C')
-        pdf.set_text_color(239, 68, 68) # Red
+        pdf.set_text_color(239, 68, 68) 
         pdf.cell(45, 10, f"Rs. {total_dr:,.2f}", 1, 0, 'C')
-        pdf.set_text_color(79, 70, 229) # Indigo
+        pdf.set_text_color(79, 70, 229) 
         pdf.cell(45, 10, f"Rs. {closing_bal:,.2f}", 1, 1, 'C')
         
         pdf.ln(8)
-        pdf.set_text_color(15, 23, 42) # Slate 900
+        pdf.set_text_color(15, 23, 42) 
         
-        # Transactions List Section
         pdf.set_font('Helvetica', 'B', 13)
         pdf.cell(0, 8, "2. Transaction Detail Ledger", ln=1)
         pdf.ln(2)
         
-        # Table Headers
         pdf.set_font('Helvetica', 'B', 9)
-        pdf.set_fill_color(79, 70, 229) # Indigo
+        pdf.set_fill_color(79, 70, 229) 
         pdf.set_text_color(255, 255, 255)
         
         pdf.cell(25, 8, "ID", 1, 0, 'L', True)
@@ -367,8 +353,7 @@ def create_pdf_report(df_day, selected_date, opening_bal, total_cr, total_dr, cl
         pdf.cell(20, 8, "Type", 1, 0, 'C', True)
         pdf.cell(35, 8, "Amount", 1, 1, 'R', True)
         
-        # Table Rows
-        pdf.set_text_color(51, 65, 85) # Slate 700
+        pdf.set_text_color(51, 65, 85) 
         pdf.set_font('Helvetica', '', 8.5)
         
         if df_day.empty:
@@ -395,7 +380,7 @@ def create_pdf_report(df_day, selected_date, opening_bal, total_cr, total_dr, cl
                     pdf.set_text_color(239, 68, 68)
                 pdf.cell(20, 8, type_text, 1, 0, 'C', True)
                 
-                pdf.set_text_color(51, 65, 85) # Reset
+                pdf.set_text_color(51, 65, 85) 
                 try:
                     amount_val = float(row["Amount"])
                 except (ValueError, TypeError):
@@ -405,7 +390,6 @@ def create_pdf_report(df_day, selected_date, opening_bal, total_cr, total_dr, cl
                 
         pdf.ln(12)
         
-        # Reconciliation & Closing Verification
         pdf.set_font('Helvetica', 'B', 11)
         pdf.cell(0, 6, "3. Statement Declarations & Approvals", ln=1)
         pdf.set_font('Helvetica', '', 8.5)
@@ -414,7 +398,6 @@ def create_pdf_report(df_day, selected_date, opening_bal, total_cr, total_dr, cl
         
         pdf.ln(15)
         
-        # Signatures
         pdf.set_text_color(15, 23, 42)
         pdf.set_font('Helvetica', 'B', 9.5)
         
@@ -427,29 +410,22 @@ def create_pdf_report(df_day, selected_date, opening_bal, total_cr, total_dr, cl
         return bytes(pdf_bytes)
 
 # ==============================================================================
-# DATA SYNCHRONIZATION (READ) - Run early so df is available for the taskbar
+# DATA SYNCHRONIZATION (READ) - Main Sheet 1
 # ==============================================================================
 df = pd.DataFrame(columns=DEFAULT_COLUMNS)
 error_message = None
 
 if st.session_state.mode == "live":
     try:
-        # Establish the Google Sheets connection
         conn = st.connection("gsheets", type=GSheetsConnection)
-        
-        # Read from the configured spreadsheet. By default, it reads the first sheet
         df = conn.read(ttl="5s")
-        
-        # Ensure we have all correct columns, standardizing names
         if df is not None and not df.empty:
-            # If spreadsheet was read but has columns matching, verify and clean
             df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
             for col in DEFAULT_COLUMNS:
                 if col not in df.columns:
                     df[col] = None
             df = df[DEFAULT_COLUMNS]
         else:
-            # Initialize sheet with headers if empty
             df = pd.DataFrame(columns=DEFAULT_COLUMNS)
             conn.update(data=df)
             
@@ -458,7 +434,6 @@ if st.session_state.mode == "live":
         st.session_state.mode = "demo"
         df = st.session_state.demo_df.copy()
 else:
-    # Read sandbox data from session state
     df = st.session_state.demo_df.copy()
 
 # Ensure types are correct
@@ -470,84 +445,57 @@ df["Description"] = df["Description"].fillna("No details provided")
 
 
 # ==============================================================================
-# HEADER BANNER & TOP TASKBAR
+# SPECIALIZED UDHARO TRACKER STATE INITIALIZATION & CACHING
 # ==============================================================================
-col_title, col_taskbar = st.columns([3, 1])
+if "sales_df" not in st.session_state:
+    st.session_state.sales_df = pd.DataFrame(columns=["Date", "Customer_Name", "Customer_Phone", "Total_Amount", "Amount_Paid", "Balance_Due", "ID", "Type"])
+if "purchases_df" not in st.session_state:
+    st.session_state.purchases_df = pd.DataFrame(columns=["Date", "Supplier_Name", "Supplier_Phone", "Total_Amount", "Amount_Paid", "Balance_Due", "ID", "Type"])
 
-with col_title:
-    st.markdown("""
-        <div class="header-banner" style="margin-bottom: 15px; padding: 25px 35px;">
-            <div class="header-title" style="font-size: 2.0rem;">⚖️ Dr-Cr Ledger Pro</div>
-            <div class="header-subtitle" style="font-size: 0.95rem;">Secure Accounting Ledger with Real-time Google Sheets CRUD Operations</div>
-        </div>
-    """, unsafe_allow_html=True)
+def load_udharo_data(force=False):
+    if st.session_state.mode == "live":
+        try:
+            if force or st.session_state.sales_df.empty or "last_sales_fetch" not in st.session_state:
+                st.session_state.sales_df = db_logic.fetch_sales_sheet()
+                st.session_state.last_sales_fetch = datetime.datetime.now()
+            if force or st.session_state.purchases_df.empty or "last_purchases_fetch" not in st.session_state:
+                st.session_state.purchases_df = db_logic.fetch_purchases_sheet()
+                st.session_state.last_purchases_fetch = datetime.datetime.now()
+        except Exception as e:
+            st.error(f"Error loading Udharo data: {e}")
+    else:
+        # Mock sandbox data if empty
+        if force or st.session_state.sales_df.empty:
+            st.session_state.sales_df = pd.DataFrame([
+                {"Date": datetime.date.today(), "Customer_Name": "Ramesh Adhikari", "Customer_Phone": "9851098765", "Total_Amount": 25000.0, "Amount_Paid": 10000.0, "Balance_Due": 15000.0, "ID": "tx-s-mock1", "Type": "Udharo"},
+                {"Date": datetime.date.today() - datetime.timedelta(days=2), "Customer_Name": "Sita Thapa", "Customer_Phone": "9841345678", "Total_Amount": 8500.0, "Amount_Paid": 8500.0, "Balance_Due": 0.0, "ID": "tx-s-mock2", "Type": "Cash"},
+                {"Date": datetime.date.today() - datetime.timedelta(days=5), "Customer_Name": "Karan Shrestha", "Customer_Phone": "9812345678", "Total_Amount": 12000.0, "Amount_Paid": 4000.0, "Balance_Due": 8000.0, "ID": "tx-s-mock3", "Type": "Udharo"}
+            ])
+        if force or st.session_state.purchases_df.empty:
+            st.session_state.purchases_df = pd.DataFrame([
+                {"Date": datetime.date.today(), "Supplier_Name": "NAASA Tech Supplies", "Supplier_Phone": "014234567", "Total_Amount": 45000.0, "Amount_Paid": 15000.0, "Balance_Due": 30000.0, "ID": "tx-p-mock1", "Type": "Udharo"},
+                {"Date": datetime.date.today() - datetime.timedelta(days=3), "Supplier_Name": "Pooja Stationery", "Supplier_Phone": "9860123456", "Total_Amount": 5000.0, "Amount_Paid": 5000.0, "Balance_Due": 0.0, "ID": "tx-p-mock2", "Type": "Cash"}
+            ])
 
-with col_taskbar:
-    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-    # Elegant calendar type dropdown in the top-right taskbar
-    with st.popover("📅 View Daily Entries", use_container_width=True):
-        st.markdown("<h4 style='margin-top:0; color:#4f46e5; font-family:\"Outfit\", sans-serif;'>📅 Daily Entry Finder</h4>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size:0.85rem; color:#64748b; margin-top:-5px;'>Select a date to inspect all recorded debit/credit entries.</p>", unsafe_allow_html=True)
-        
-        selected_date = st.date_input("Select Date", value=datetime.date.today(), key="view_date_picker")
-        
-        # Filter transactions by the selected date
-        daily_entries = df[df["Date"] == selected_date] if not df.empty else pd.DataFrame()
-        
-        if not daily_entries.empty:
-            st.markdown(f"<div style='margin-bottom:10px; font-weight:600; font-size:0.9rem; color:#0f172a;'>🔍 {len(daily_entries)} Entries on {selected_date}:</div>", unsafe_allow_html=True)
-            
-            # Compute totals for this day
-            day_credits = daily_entries[daily_entries["Type"] == "Credit"]["Amount"].sum()
-            day_debits = daily_entries[daily_entries["Type"] == "Debit"]["Amount"].sum()
-            day_diff = day_credits - day_debits
-            
-            st.markdown(f"""
-                <div style='background: #f1f5f9; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.8rem; border-left: 3px solid #4f46e5;'>
-                    <div style='display: flex; justify-content: space-between;'>
-                        <span>Total Inflow (CR):</span> <strong style='color:#10b981;'>Rs. {day_credits:,.2f}</strong>
-                    </div>
-                    <div style='display: flex; justify-content: space-between; margin-top: 2px;'>
-                        <span>Total Outflow (DR):</span> <strong style='color:#ef4444;'>Rs. {day_debits:,.2f}</strong>
-                    </div>
-                    <div style='display: flex; justify-content: space-between; margin-top: 4px; border-top: 1px dashed #cbd5e1; padding-top: 4px; font-weight:600;'>
-                        <span>Net Daily Change:</span> <span style='color:{"#10b981" if day_diff >= 0 else "#ef4444"};'>Rs. {day_diff:,.2f}</span>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            for _, row in daily_entries.iterrows():
-                badge_style = "background-color: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2);" if row["Type"] == "Credit" else "background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);"
-                type_label = "CR" if row["Type"] == "Credit" else "DR"
-                st.markdown(f"""
-                    <div style='background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-bottom: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);'>
-                        <div style='display: flex; justify-content: space-between; align-items: center;'>
-                            <strong style='font-size: 0.85rem; color: #1e293b;'>{row['Description']}</strong>
-                            <span style='padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; {badge_style}'>{type_label} Rs. {row['Amount']:,.2f}</span>
-                        </div>
-                        <div style='font-size: 0.75rem; color: #64748b; margin-top: 4px; display: flex; justify-content: space-between;'>
-                            <span>Category: <b>{row['Category']}</b></span>
-                            <span style='font-family: monospace;'>ID: {row['ID']}</span>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-                <div style='text-align: center; padding: 20px 10px; color: #64748b;'>
-                    <span style='font-size: 2rem; display: block; margin-bottom: 10px;'>📅</span>
-                    <span style='font-size: 0.85rem;'>No ledger entries recorded on <b>{selected_date}</b>.</span>
-                </div>
-            """, unsafe_allow_html=True)
+# Initial load
+load_udharo_data()
 
-if error_message:
-    st.error(f"❌ Google Sheets Connection Error: {error_message}")
-    st.info("⚠️ Falling back to sandbox Demo Mode. Please check your `.streamlit/secrets.toml` parameters or spreadsheet permissions.")
 
-# Sidebar Design
+# ==============================================================================
+# GLOBAL SIDEBAR CONFIGURATION
+# ==============================================================================
 with st.sidebar:
+    st.markdown("<h2 style='margin-top:0; color:#4f46e5; font-family:\"Outfit\", sans-serif;'>🧭 Navigation Menu</h2>", unsafe_allow_html=True)
+    app_page = st.selectbox(
+        "Select Dashboard Page",
+        options=["📊 General Cash Ledger", "🤝 Debts & Credits"],
+        index=0,
+        key="global_page_nav"
+    )
+    st.markdown("---")
+
     st.markdown("<h3 style='margin-top:0;'>🛠️ Connection Control</h3>", unsafe_allow_html=True)
     
-    # Elegant connection status indicator
     if secrets_configured:
         st.markdown("""
             <div style='background:rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius:10px; padding: 12px; margin-bottom: 20px; display: flex; align-items: center;'>
@@ -563,7 +511,6 @@ with st.sidebar:
             </div>
         """, unsafe_allow_html=True)
         
-    # Mode selector (only selectable if secrets are configured; otherwise locked to Demo Mode)
     mode_options = ["Demo / Sandbox Mode", "Live Google Sheets Connection"]
     selected_mode_idx = 1 if (st.session_state.mode == "live" and secrets_configured) else 0
     
@@ -575,19 +522,16 @@ with st.sidebar:
         help="To enable 'Live Connection', follow the secrets configuration instructions to add your Google Service Account credentials."
     )
     
-    # Update active mode
     if mode_selection == "Live Google Sheets Connection" and secrets_configured:
         st.session_state.mode = "live"
     else:
         st.session_state.mode = "demo"
         
-    # Manual Refresh button for live mode
     if st.session_state.mode == "live":
-        st.button("🔄 Sync with Google Sheets", on_click=force_refresh, use_container_width=True)
+        if st.button("🔄 Sync with Google Sheets", on_click=force_refresh, use_container_width=True):
+            load_udharo_data(force=True)
         
     st.markdown("---")
-    
-    # Information & Onboarding card
     st.markdown("### 📚 Connection Guide")
     st.info("""
     **Cash Ledger Convention:**
@@ -604,523 +548,502 @@ with st.sidebar:
         """)
 
 # ==============================================================================
-# LEDGER SETTINGS & OPENING BALANCE INTERCONNECT
+# RENDER PAGE: 📊 GENERAL CASH LEDGER
 # ==============================================================================
-detected_opening = 0.0
-# Find if an Opening Balance transaction already exists in the loaded DataFrame
-opening_row = df[(df["Category"] == "Opening Balance") | (df["Description"] == "Opening Balance")] if not df.empty else pd.DataFrame()
-if not opening_row.empty:
-    detected_opening = float(opening_row.iloc[0]["Amount"])
-
-with st.sidebar:
-    st.markdown("### 💰 Ledger Settings")
-    opening_balance = st.number_input(
-        "Opening Balance (Rs.)",
-        min_value=0.00,
-        max_value=10000000.00,
-        value=detected_opening,
-        step=500.00,
-        help="Specify the starting balance of this ledger. You can save/update this value in your Google Sheet spreadsheet below."
-    )
+if app_page == "📊 General Cash Ledger":
     
-    # Render save button if the value in the input field differs from the spreadsheet row
-    if opening_balance != detected_opening:
-        if st.button("💾 Save Balance to Google Sheet", use_container_width=True, type="primary"):
-            # Update or create the Opening Balance row
-            updated_df = df.copy()
+    # Header Banner & Top Taskbar
+    col_title, col_taskbar = st.columns([3, 1])
+    
+    with col_title:
+        st.markdown("""
+            <div class="header-banner" style="margin-bottom: 15px; padding: 25px 35px;">
+                <div class="header-title" style="font-size: 2.0rem;">⚖️ Dr-Cr Ledger Pro</div>
+                <div class="header-subtitle" style="font-size: 0.95rem;">Secure Accounting Ledger with Real-time Google Sheets CRUD Operations</div>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    with col_taskbar:
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        with st.popover("📅 View Daily Entries", use_container_width=True):
+            st.markdown("<h4 style='margin-top:0; color:#4f46e5; font-family:\"Outfit\", sans-serif;'>📅 Daily Entry Finder</h4>", unsafe_allow_html=True)
+            st.markdown("<p style='font-size:0.85rem; color:#64748b; margin-top:-5px;'>Select a date to inspect all recorded debit/credit entries.</p>", unsafe_allow_html=True)
             
-            # Find matching row indices
-            opening_idx = updated_df[(updated_df["Category"] == "Opening Balance") | (updated_df["Description"] == "Opening Balance")].index
+            selected_date = st.date_input("Select Date", value=datetime.date.today(), key="view_date_picker")
+            daily_entries = df[df["Date"] == selected_date] if not df.empty else pd.DataFrame()
             
-            if not opening_idx.empty:
-                if opening_balance == 0.0:
-                    # If set to zero, remove it entirely
-                    updated_df = updated_df.drop(opening_idx)
-                else:
-                    # Update existing opening balance entry
-                    updated_df.at[opening_idx[0], "Amount"] = round(opening_balance, 2)
-                    updated_df.at[opening_idx[0], "Type"] = "Credit"
-                    updated_df.at[opening_idx[0], "Date"] = (df["Date"].min() if not df.empty and pd.notnull(df["Date"].min()) else datetime.date.today()).strftime("%Y-%m-%d")
-            elif opening_balance > 0.0:
-                # Add new opening balance entry at the beginning
-                new_id = f"tx-opening"
-                earliest_date = df["Date"].min() if not df.empty and pd.notnull(df["Date"].min()) else datetime.date.today()
+            if not daily_entries.empty:
+                st.markdown(f"<div style='margin-bottom:10px; font-weight:600; font-size:0.9rem; color:#0f172a;'>🔍 {len(daily_entries)} Entries on {selected_date}:</div>", unsafe_allow_html=True)
                 
-                new_row = pd.DataFrame([{
-                    "ID": new_id,
-                    "Date": earliest_date.strftime("%Y-%m-%d") if isinstance(earliest_date, (datetime.date, datetime.datetime)) else str(earliest_date),
-                    "Description": "Opening Balance",
-                    "Category": "Opening Balance",
-                    "Type": "Credit",
-                    "Amount": round(opening_balance, 2)
-                }])
-                updated_df = pd.concat([new_row, updated_df], ignore_index=True)
-            
-            # Save updated data
-            if st.session_state.mode == "live":
-                try:
-                    conn.update(data=updated_df)
-                    st.success("🎉 Opening Balance successfully written to Google Sheets!")
-                    force_refresh()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Failed to update Google Sheet: {e}")
+                day_credits = daily_entries[daily_entries["Type"] == "Credit"]["Amount"].sum()
+                day_debits = daily_entries[daily_entries["Type"] == "Debit"]["Amount"].sum()
+                day_diff = day_credits - day_debits
+                
+                st.markdown(f"""
+                    <div style='background: #f1f5f9; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.8rem; border-left: 3px solid #4f46e5;'>
+                        <div style='display: flex; justify-content: space-between;'>
+                            <span>Total Inflow (CR):</span> <strong style='color:#10b981;'>Rs. {day_credits:,.2f}</strong>
+                        </div>
+                        <div style='display: flex; justify-content: space-between; margin-top: 2px;'>
+                            <span>Total Outflow (DR):</span> <strong style='color:#ef4444;'>Rs. {day_debits:,.2f}</strong>
+                        </div>
+                        <div style='display: flex; justify-content: space-between; margin-top: 4px; border-top: 1px dashed #cbd5e1; padding-top: 4px; font-weight:600;'>
+                            <span>Net Daily Change:</span> <span style='color:{"#10b981" if day_diff >= 0 else "#ef4444"};'>Rs. {day_diff:,.2f}</span>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                for _, row in daily_entries.iterrows():
+                    badge_style = "background-color: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2);" if row["Type"] == "Credit" else "background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);"
+                    type_label = "CR" if row["Type"] == "Credit" else "DR"
+                    st.markdown(f"""
+                        <div style='background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-bottom: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);'>
+                            <div style='display: flex; justify-content: space-between; align-items: center;'>
+                                <strong style='font-size: 0.85rem; color: #1e293b;'>{row['Description']}</strong>
+                                <span style='padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; {badge_style}'>{type_label} Rs. {row['Amount']:,.2f}</span>
+                            </div>
+                            <div style='font-size: 0.75rem; color: #64748b; margin-top: 4px; display: flex; justify-content: space-between;'>
+                                <span>Category: <b>{row['Category']}</b></span>
+                                <span style='font-family: monospace;'>ID: {row['ID']}</span>
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
             else:
-                st.session_state.demo_df = updated_df
-                st.success("🎉 Opening Balance successfully updated in Demo Sandbox!")
-                st.rerun()
-                
-    st.markdown("---")
-
-# ==============================================================================
-# FINANCIAL COMPUTATIONS
-# ==============================================================================
-total_debits = df[(df["Type"] == "Debit") & (df["Category"] != "Opening Balance")]["Amount"].sum()   # Outflow (DR)
-total_credits = df[(df["Type"] == "Credit") & (df["Category"] != "Opening Balance")]["Amount"].sum() # Inflow (CR)
-net_balance = opening_balance + total_credits - total_debits # Balance = Opening + Credit (Inflow) - Debit (Outflow)
-
-# Render HTML metric cards with premium design and colors
-st.markdown(f"""
-    <div class="metric-card-container">
-        <div class="metric-card credit-accent">
-            <div class="metric-title">📥 Total Credits (CR - Cash Inflow)</div>
-            <div class="metric-value" style="color: #10b981;">Rs. {total_credits:,.2f}</div>
-            <span class="metric-badge badge-credit">+{len(df[df["Type"] == "Credit"])} Entries</span>
-        </div>
-        <div class="metric-card debit-accent">
-            <div class="metric-title">📤 Total Debits (DR - Cash Outflow)</div>
-            <div class="metric-value" style="color: #ef4444;">Rs. {total_debits:,.2f}</div>
-            <span class="metric-badge badge-debit">-{len(df[df["Type"] == "Debit"])} Entries</span>
-        </div>
-        <div class="metric-card balance-accent">
-            <div class="metric-title">⚖️ Net Ledger Balance</div>
-            <div class="metric-value" style="color: {'#4f46e5' if net_balance >= 0 else '#ef4444'};">Rs. {net_balance:,.2f}</div>
-            <span class="metric-badge badge-balance">{'Positive Balance' if net_balance >= 0 else 'Deficit'}</span>
-            {f'<span style="font-size:0.75rem; color:#64748b; display:block; margin-top:5px;">(Incl. Rs. {opening_balance:,.2f} Opening Balance)</span>' if opening_balance > 0 else ''}
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-
-# ==============================================================================
-# MAIN TABS: VISUALIZATION, LEDGER VIEW & CRUD OPERATIONS
-# ==============================================================================
-tab_dashboard, tab_create, tab_update, tab_delete = st.tabs([
-    "📊 Ledger Insights & Analytics",
-    "➕ Create Ledger Entry (Insert)",
-    "✏️ Update Ledger Entry (Edit)",
-    "❌ Delete Ledger Entry (Remove)"
-])
-
-# ------------------------------------------------------------------------------
-# TAB 1: DASHBOARD, SEARCH, FILTERS & ANALYTICS
-# ------------------------------------------------------------------------------
-with tab_dashboard:
-    col_filters, col_charts = st.columns([1, 2])
+                st.markdown(f"""
+                    <div style='text-align: center; padding: 20px 10px; color: #64748b;'>
+                        <span style='font-size: 2rem; display: block; margin-bottom: 10px;'>📅</span>
+                        <span style='font-size: 0.85rem;'>No ledger entries recorded on <b>{selected_date}</b>.</span>
+                    </div>
+                """, unsafe_allow_html=True)
     
-    with col_filters:
-        st.markdown("### 🔍 Search & Filters")
-        search_query = st.text_input("Search description or ID", placeholder="Search transactions...")
-        filter_category = st.multiselect("Filter by Category", options=CATEGORIES, default=[])
-        filter_type = st.multiselect("Filter by Type", options=["Debit", "Credit"], default=[])
-        
-        # Apply filters
-        filtered_df = df.copy()
-        if search_query:
-            filtered_df = filtered_df[
-                filtered_df["Description"].str.contains(search_query, case=False, na=False) |
-                filtered_df["ID"].str.contains(search_query, case=False, na=False)
-            ]
-        if filter_category:
-            filtered_df = filtered_df[filtered_df["Category"].isin(filter_category)]
-        if filter_type:
-            filtered_df = filtered_df[filtered_df["Type"].isin(filter_type)]
-            
-        st.markdown(f"**Showing {len(filtered_df)} of {len(df)} transactions**")
-        
-        # Display Transaction Table beautifully using Streamlit Data Editor
-        st.data_editor(
-            filtered_df,
-            column_config={
-                "ID": st.column_config.TextColumn("Transaction ID", width="small", disabled=True),
-                "Date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
-                "Description": st.column_config.TextColumn("Description", width="medium"),
-                "Category": st.column_config.SelectboxColumn("Category", options=CATEGORIES, width="small"),
-                "Type": st.column_config.SelectboxColumn("Type", options=["Debit", "Credit"], width="small"),
-                "Amount": st.column_config.NumberColumn("Amount (Rs.)", format="Rs. %.2f", width="small")
-            },
-            hide_index=True,
-            use_container_width=True,
-            disabled=True,
-            key="ledger_table"
+    if error_message:
+        st.error(f"❌ Google Sheets Connection Error: {error_message}")
+        st.info("⚠️ Falling back to sandbox Demo Mode. Please check your `.streamlit/secrets.toml` parameters or spreadsheet permissions.")
+
+    # Ledger Settings sidebar sub-element
+    detected_opening = 0.0
+    opening_row = df[(df["Category"] == "Opening Balance") | (df["Description"] == "Opening Balance")] if not df.empty else pd.DataFrame()
+    if not opening_row.empty:
+        detected_opening = float(opening_row.iloc[0]["Amount"])
+    
+    with st.sidebar:
+        st.markdown("### 💰 Ledger Settings")
+        opening_balance = st.number_input(
+            "Opening Balance (Rs.)",
+            min_value=0.00,
+            max_value=10000000.00,
+            value=detected_opening,
+            step=500.00,
+            help="Specify the starting balance of this ledger."
         )
         
-    with col_charts:
-        st.markdown("### 📈 Visual Accounting Insights")
-        
-        if not filtered_df.empty:
-            # 1. Timeline Cumulative Balance Chart
-            # Prepare data: Sort by date
-            chart_df = filtered_df.copy()
-            chart_df['Date_Parsed'] = pd.to_datetime(chart_df['Date'])
-            chart_df = chart_df.sort_values(by='Date_Parsed')
-            
-            # Net Value per transaction (Positive for Credit/Inflow, Negative for Debit/Outflow)
-            chart_df['Net_Value'] = chart_df.apply(
-                lambda row: row['Amount'] if row['Type'] == 'Credit' else -row['Amount'], axis=1
-            )
-            
-            # Calculate cumulative balance
-            chart_df['Cumulative_Balance'] = opening_balance + chart_df['Net_Value'].cumsum()
-            
-            # Line Chart using Altair for state-of-the-art visuals
-            line_chart = alt.Chart(chart_df).mark_line(
-                point=alt.OverlayMarkDef(color='#4f46e5', size=60), 
-                strokeWidth=3, 
-                color='#6366f1'
-            ).encode(
-                x=alt.X('Date_Parsed:T', title='Transaction Date'),
-                y=alt.Y('Cumulative_Balance:Q', title='Running Balance (Rs.)'),
-                tooltip=['Date:N', 'Description:N', 'Type:N', 'Amount:Q', 'Cumulative_Balance:Q']
-            ).properties(
-                height=250,
-                title="Running Ledger Balance Trend"
-            ).interactive()
-            
-            st.altair_chart(line_chart, use_container_width=True)
-            
-            # 2. Expenses Category Breakdowns (Pie/Donut and Bar side-by-side)
-            col_chart_left, col_chart_right = st.columns(2)
-            
-            with col_chart_left:
-                # Category Volume
-                cat_df = filtered_df.groupby(["Category", "Type"])["Amount"].sum().reset_index()
+        if opening_balance != detected_opening:
+            if st.button("💾 Save Balance to Google Sheet", use_container_width=True, type="primary"):
+                updated_df = df.copy()
+                opening_idx = updated_df[(updated_df["Category"] == "Opening Balance") | (updated_df["Description"] == "Opening Balance")].index
                 
-                cat_chart = alt.Chart(cat_df).mark_bar().encode(
-                    x=alt.X('Amount:Q', title='Total (Rs.)'),
-                    y=alt.Y('Category:N', sort='-x', title='Category'),
-                    color=alt.Color('Type:N', scale=alt.Scale(domain=['Credit', 'Debit'], range=['#10b981', '#ef4444']), title='Type'),
-                    tooltip=['Category:N', 'Type:N', 'Amount:Q']
-                ).properties(
-                    height=200,
-                    title="Volume by Category"
-                )
-                st.altair_chart(cat_chart, use_container_width=True)
+                if not opening_idx.empty:
+                    if opening_balance == 0.0:
+                        updated_df = updated_df.drop(opening_idx)
+                    else:
+                        updated_df.at[opening_idx[0], "Amount"] = round(opening_balance, 2)
+                        updated_df.at[opening_idx[0], "Type"] = "Credit"
+                        updated_df.at[opening_idx[0], "Date"] = (df["Date"].min() if not df.empty and pd.notnull(df["Date"].min()) else datetime.date.today()).strftime("%Y-%m-%d")
+                elif opening_balance > 0.0:
+                    new_id = f"tx-opening"
+                    earliest_date = df["Date"].min() if not df.empty and pd.notnull(df["Date"].min()) else datetime.date.today()
+                    new_row = pd.DataFrame([{
+                        "ID": new_id,
+                        "Date": earliest_date.strftime("%Y-%m-%d") if isinstance(earliest_date, (datetime.date, datetime.datetime)) else str(earliest_date),
+                        "Description": "Opening Balance",
+                        "Category": "Opening Balance",
+                        "Type": "Credit",
+                        "Amount": round(opening_balance, 2)
+                    }])
+                    updated_df = pd.concat([new_row, updated_df], ignore_index=True)
                 
-            with col_chart_right:
-                # Debit vs Credit Distribution
-                type_df = filtered_df.groupby("Type")["Amount"].sum().reset_index()
-                donut_chart = alt.Chart(type_df).mark_arc(innerRadius=40).encode(
-                    theta=alt.Theta(field="Amount", type="quantitative"),
-                    color=alt.Color(field="Type", type="nominal", scale=alt.Scale(domain=['Credit', 'Debit'], range=['#10b981', '#ef4444'])),
-                    tooltip=['Type:N', 'Amount:Q']
-                ).properties(
-                    height=200,
-                    title="Credit (CR) vs Debit (DR) Ratio"
-                )
-                st.altair_chart(donut_chart, use_container_width=True)
-        else:
-            st.info("💡 Add ledger entries or adjust your filters to view analytical insights.")
-
-# ------------------------------------------------------------------------------
-# TAB 2: CREATE / INSERT OPERATION
-# ------------------------------------------------------------------------------
-with tab_create:
-    st.markdown("### ➕ Record a New Transaction")
-    st.markdown("Fill in the fields below to add a transaction to your ledger.")
-    
-    with st.form("insert_transaction_form", clear_on_submit=True):
-        col_c1, col_c2, col_c3 = st.columns(3)
-        
-        with col_c1:
-            tx_date = st.date_input("Transaction Date", value=datetime.date.today())
-            tx_type = st.selectbox("Entry Type (DR/CR)", options=["Debit", "Credit"], 
-                                   help="Debit represents an outflow (expense); Credit represents an inflow (income).")
-        
-        with col_c2:
-            tx_category = st.selectbox("Category", options=CATEGORIES)
-            tx_amount = st.number_input("Amount (Rs.)", min_value=0.01, max_value=1000000.0, value=100.0, step=10.0, format="%.2f")
-            
-        with col_c3:
-            tx_desc = st.text_input("Description / Notes", placeholder="E.g., Adobe Creative Cloud Subscription")
-            
-        submit_btn = st.form_submit_button("💾 Save Ledger Entry")
-        
-        if submit_btn:
-            if not tx_desc.strip():
-                st.error("❌ Description is required!")
-            else:
-                # Generate unique ID for CRUD targeting
-                new_id = f"tx-{uuid.uuid4().hex[:6]}"
-                
-                # Force Cash Withdrawal to Debit (DR - Outflow)
-                final_type = tx_type
-                if tx_category == "Cash Withdrawal":
-                    final_type = "Debit"
-                    st.toast("ℹ️ Automatically listed as Debit (DR) for Cash Withdrawal.")
-                
-                # Construct new record
-                new_entry = {
-                    "ID": new_id,
-                    "Date": tx_date.strftime("%Y-%m-%d"),
-                    "Description": tx_desc.strip(),
-                    "Category": tx_category,
-                    "Type": final_type,
-                    "Amount": round(tx_amount, 2)
-                }
-                
-                # Append to active DataFrame
-                updated_df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
-                
-                # Save data based on mode
                 if st.session_state.mode == "live":
                     try:
                         conn.update(data=updated_df)
-                        st.success(f"🎉 Successfully inserted transaction '{tx_desc}' to Google Sheet!")
-                        st.balloons()
-                        # Force refresh
+                        st.success("🎉 Opening Balance successfully written to Google Sheets!")
                         force_refresh()
                         st.rerun()
                     except Exception as e:
-                        st.error(f"❌ Failed to save to Google Sheets: {e}")
+                        st.error(f"❌ Failed to update Google Sheet: {e}")
                 else:
                     st.session_state.demo_df = updated_df
-                    st.success(f"🎉 Successfully registered transaction '{tx_desc}' in Demo Sandbox!")
-                    st.toast("Updated demo ledger in memory!")
+                    st.success("🎉 Opening Balance successfully updated in Demo Sandbox!")
                     st.rerun()
+                    
+        st.markdown("---")
 
-# ------------------------------------------------------------------------------
-# TAB 3: UPDATE / EDIT OPERATION
-# ------------------------------------------------------------------------------
-with tab_update:
-    st.markdown("### ✏️ Edit an Existing Transaction")
-    st.markdown("Select a transaction from the list to modify its contents.")
-    
-    if df.empty:
-        st.info("💡 The ledger is empty. Create some entries first.")
-    else:
-        # Create a dropdown mapping ID + Description for easy targeting
-        select_options = [f"{row['ID']} - {row['Description']} (Rs. {row['Amount']:.2f})" for _, row in df.iterrows()]
-        selected_option = st.selectbox("Select Transaction to Edit", options=select_options)
+    # Financial Computations
+    total_debits = df[(df["Type"] == "Debit") & (df["Category"] != "Opening Balance")]["Amount"].sum()   
+    total_credits = df[(df["Type"] == "Credit") & (df["Category"] != "Opening Balance")]["Amount"].sum() 
+    net_balance = opening_balance + total_credits - total_debits 
+
+    st.markdown(f"""
+        <div class="metric-card-container">
+            <div class="metric-card credit-accent">
+                <div class="metric-title">📥 Total Credits (CR - Cash Inflow)</div>
+                <div class="metric-value" style="color: #10b981;">Rs. {total_credits:,.2f}</div>
+                <span class="metric-badge badge-credit">+{len(df[df["Type"] == "Credit"])} Entries</span>
+            </div>
+            <div class="metric-card debit-accent">
+                <div class="metric-title">📤 Total Debits (DR - Cash Outflow)</div>
+                <div class="metric-value" style="color: #ef4444;">Rs. {total_debits:,.2f}</div>
+                <span class="metric-badge badge-debit">-{len(df[df["Type"] == "Debit"])} Entries</span>
+            </div>
+            <div class="metric-card balance-accent">
+                <div class="metric-title">⚖️ Net Ledger Balance</div>
+                <div class="metric-value" style="color: {'#4f46e5' if net_balance >= 0 else '#ef4444'};">Rs. {net_balance:,.2f}</div>
+                <span class="metric-badge badge-balance">{'Positive Balance' if net_balance >= 0 else 'Deficit'}</span>
+                {f'<span style="font-size:0.75rem; color:#64748b; display:block; margin-top:5px;">(Incl. Rs. {opening_balance:,.2f} Opening Balance)</span>' if opening_balance > 0 else ''}
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Main Tabs
+    tab_dashboard, tab_create, tab_update, tab_delete = st.tabs([
+        "📊 Ledger Insights & Analytics",
+        "➕ Create Ledger Entry (Insert)",
+        "✏️ Update Ledger Entry (Edit)",
+        "❌ Delete Ledger Entry (Remove)"
+    ])
+
+    with tab_dashboard:
+        col_filters, col_charts = st.columns([1, 2])
         
-        # Extract ID
-        selected_id = selected_option.split(" - ")[0]
-        selected_row = df[df["ID"] == selected_id].iloc[0]
+        with col_filters:
+            st.markdown("### 🔍 Search & Filters")
+            search_query = st.text_input("Search description or ID", placeholder="Search transactions...")
+            filter_category = st.multiselect("Filter by Category", options=CATEGORIES, default=[])
+            filter_type = st.multiselect("Filter by Type", options=["Debit", "Credit"], default=[])
+            
+            filtered_df = df.copy()
+            if search_query:
+                filtered_df = filtered_df[
+                    filtered_df["Description"].str.contains(search_query, case=False, na=False) |
+                    filtered_df["ID"].str.contains(search_query, case=False, na=False)
+                ]
+            if filter_category:
+                filtered_df = filtered_df[filtered_df["Category"].isin(filter_category)]
+            if filter_type:
+                filtered_df = filtered_df[filtered_df["Type"].isin(filter_type)]
+                
+            st.markdown(f"**Showing {len(filtered_df)} of {len(df)} transactions**")
+            
+            st.data_editor(
+                filtered_df,
+                column_config={
+                    "ID": st.column_config.TextColumn("Transaction ID", width="small", disabled=True),
+                    "Date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
+                    "Description": st.column_config.TextColumn("Description", width="medium"),
+                    "Category": st.column_config.SelectboxColumn("Category", options=CATEGORIES, width="small"),
+                    "Type": st.column_config.SelectboxColumn("Type", options=["Debit", "Credit"], width="small"),
+                    "Amount": st.column_config.NumberColumn("Amount (Rs.)", format="Rs. %.2f", width="small")
+                },
+                hide_index=True,
+                use_container_width=True,
+                disabled=True,
+                key="ledger_table"
+            )
+            
+        with col_charts:
+            st.markdown("### 📈 Visual Accounting Insights")
+            
+            if not filtered_df.empty:
+                chart_df = filtered_df.copy()
+                chart_df['Date_Parsed'] = pd.to_datetime(chart_df['Date'])
+                chart_df = chart_df.sort_values(by='Date_Parsed')
+                
+                chart_df['Net_Value'] = chart_df.apply(
+                    lambda row: row['Amount'] if row['Type'] == 'Credit' else -row['Amount'], axis=1
+                )
+                chart_df['Cumulative_Balance'] = opening_balance + chart_df['Net_Value'].cumsum()
+                
+                line_chart = alt.Chart(chart_df).mark_line(
+                    point=alt.OverlayMarkDef(color='#4f46e5', size=60), 
+                    strokeWidth=3, 
+                    color='#6366f1'
+                ).encode(
+                    x=alt.X('Date_Parsed:T', title='Transaction Date'),
+                    y=alt.Y('Cumulative_Balance:Q', title='Running Balance (Rs.)'),
+                    tooltip=['Date:N', 'Description:N', 'Type:N', 'Amount:Q', 'Cumulative_Balance:Q']
+                ).properties(
+                    height=250,
+                    title="Running Ledger Balance Trend"
+                ).interactive()
+                
+                st.altair_chart(line_chart, use_container_width=True)
+                
+                col_chart_left, col_chart_right = st.columns(2)
+                
+                with col_chart_left:
+                    cat_df = filtered_df.groupby(["Category", "Type"])["Amount"].sum().reset_index()
+                    cat_chart = alt.Chart(cat_df).mark_bar().encode(
+                        x=alt.X('Amount:Q', title='Total (Rs.)'),
+                        y=alt.Y('Category:N', sort='-x', title='Category'),
+                        color=alt.Color('Type:N', scale=alt.Scale(domain=['Credit', 'Debit'], range=['#10b981', '#ef4444']), title='Type'),
+                        tooltip=['Category:N', 'Type:N', 'Amount:Q']
+                    ).properties(
+                        height=200,
+                        title="Volume by Category"
+                    )
+                    st.altair_chart(cat_chart, use_container_width=True)
+                    
+                with col_chart_right:
+                    type_df = filtered_df.groupby("Type")["Amount"].sum().reset_index()
+                    donut_chart = alt.Chart(type_df).mark_arc(innerRadius=40).encode(
+                        theta=alt.Theta(field="Amount", type="quantitative"),
+                        color=alt.Color(field="Type", type="nominal", scale=alt.Scale(domain=['Credit', 'Debit'], range=['#10b981', '#ef4444'])),
+                        tooltip=['Type:N', 'Amount:Q']
+                    ).properties(
+                        height=200,
+                        title="Credit (CR) vs Debit (DR) Ratio"
+                    )
+                    st.altair_chart(donut_chart, use_container_width=True)
+            else:
+                st.info("💡 Add ledger entries or adjust your filters to view analytical insights.")
+
+    with tab_create:
+        st.markdown("### ➕ Record a New Transaction")
         
-        # Render edit form
-        with st.form("update_transaction_form"):
-            st.markdown(f"**Editing Transaction: `{selected_id}`**")
-            col_u1, col_u2, col_u3 = st.columns(3)
+        with st.form("insert_transaction_form", clear_on_submit=True):
+            col_c1, col_c2, col_c3 = st.columns(3)
+            with col_c1:
+                tx_date = st.date_input("Transaction Date", value=datetime.date.today())
+                tx_type = st.selectbox("Entry Type (DR/CR)", options=["Debit", "Credit"])
+            with col_c2:
+                tx_category = st.selectbox("Category", options=CATEGORIES)
+                tx_amount = st.number_input("Amount (Rs.)", min_value=0.01, max_value=1000000.0, value=100.0, step=10.0, format="%.2f")
+            with col_c3:
+                tx_desc = st.text_input("Description / Notes", placeholder="E.g., Adobe Creative Cloud Subscription")
+                
+            submit_btn = st.form_submit_button("💾 Save Ledger Entry")
             
-            with col_u1:
-                # Handle both datetime/date objects and strings gracefully
-                val = selected_row["Date"]
-                if isinstance(val, (datetime.date, datetime.datetime)):
-                    orig_date = val
+            if submit_btn:
+                if not tx_desc.strip():
+                    st.error("❌ Description is required!")
                 else:
-                    try:
-                        orig_date = datetime.datetime.strptime(str(val), "%Y-%m-%d").date()
-                    except Exception:
-                        orig_date = datetime.date.today()
-                u_date = st.date_input("Date", value=orig_date)
-                u_type = st.selectbox("Type", options=["Debit", "Credit"], index=0 if selected_row["Type"] == "Debit" else 1)
-                
-            with col_u2:
-                # Find index of original category
-                cat_idx = CATEGORIES.index(selected_row["Category"]) if selected_row["Category"] in CATEGORIES else 0
-                u_category = st.selectbox("Category", options=CATEGORIES, index=cat_idx)
-                u_amount = st.number_input("Amount (Rs.)", min_value=0.01, value=float(selected_row["Amount"]), step=10.0, format="%.2f")
-                
-            with col_u3:
-                u_desc = st.text_input("Description", value=selected_row["Description"])
-                
-            update_btn = st.form_submit_button("📝 Apply Changes")
-            
-            if update_btn:
-                if not u_desc.strip():
-                    st.error("❌ Description cannot be blank!")
-                else:
-                    # Update row in-place
-                    updated_df = df.copy()
-                    row_idx = updated_df[updated_df["ID"] == selected_id].index[0]
+                    new_id = f"tx-{uuid.uuid4().hex[:6]}"
+                    final_type = tx_type
+                    if tx_category == "Cash Withdrawal":
+                        final_type = "Debit"
+                        st.toast("ℹ️ Automatically listed as Debit (DR) for Cash Withdrawal.")
                     
-                    # Force Cash Withdrawal to Debit (DR - Outflow)
-                    final_u_type = u_type
-                    if u_category == "Cash Withdrawal":
-                        final_u_type = "Debit"
-                        st.toast("ℹ️ Automatically forced to Debit (DR) for Cash Withdrawal.")
+                    new_entry = {
+                        "ID": new_id,
+                        "Date": tx_date.strftime("%Y-%m-%d"),
+                        "Description": tx_desc.strip(),
+                        "Category": tx_category,
+                        "Type": final_type,
+                        "Amount": round(tx_amount, 2)
+                    }
                     
-                    updated_df.at[row_idx, "Date"] = u_date.strftime("%Y-%m-%d")
-                    updated_df.at[row_idx, "Type"] = final_u_type
-                    updated_df.at[row_idx, "Category"] = u_category
-                    updated_df.at[row_idx, "Amount"] = round(u_amount, 2)
-                    updated_df.at[row_idx, "Description"] = u_desc.strip()
+                    updated_df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
                     
-                    # Save
                     if st.session_state.mode == "live":
                         try:
                             conn.update(data=updated_df)
-                            st.success(f"🎉 Updated transaction `{selected_id}` in Google Sheets!")
+                            st.success(f"🎉 Successfully inserted transaction '{tx_desc}' to Google Sheet!")
+                            st.balloons()
                             force_refresh()
                             st.rerun()
                         except Exception as e:
-                            st.error(f"❌ Failed to save update: {e}")
+                            st.error(f"❌ Failed to save to Google Sheets: {e}")
                     else:
                         st.session_state.demo_df = updated_df
-                        st.success(f"🎉 Updated transaction `{selected_id}` in Sandbox memory!")
+                        st.success(f"🎉 Successfully registered transaction '{tx_desc}' in Demo Sandbox!")
                         st.rerun()
 
-# ------------------------------------------------------------------------------
-# TAB 4: DELETE / REMOVE OPERATION
-# ------------------------------------------------------------------------------
-with tab_delete:
-    st.markdown("### ❌ Delete a Ledger Entry")
-    st.markdown("Select a transaction to permanently remove it from your records.")
-    
-    if df.empty:
-        st.info("💡 The ledger is empty.")
-    else:
-        # Select transaction to delete
-        delete_options = [f"{row['ID']} - {row['Description']} (Rs. {row['Amount']:.2f})" for _, row in df.iterrows()]
-        delete_selection = st.selectbox("Select Transaction to Delete", options=delete_options, key="del_select")
-        
-        # Extract target ID
-        delete_id = delete_selection.split(" - ")[0]
-        delete_row = df[df["ID"] == delete_id].iloc[0]
-        
-        # Show details inside a warning box
-        st.warning(f"""
-        **⚠️ Are you sure you want to permanently delete this transaction?**
-        - **ID:** `{delete_row['ID']}`
-        - **Date:** `{delete_row['Date']}`
-        - **Description:** `{delete_row['Description']}`
-        - **Category:** `{delete_row['Category']}`
-        - **Type:** `{delete_row['Type']}` (DR/CR)
-        - **Amount:** `Rs. {delete_row['Amount']:.2f}`
-        """)
-        
-        col_d1, col_d2 = st.columns([1, 5])
-        with col_d1:
+    with tab_update:
+        st.markdown("### ✏️ Edit an Existing Transaction")
+        if df.empty:
+            st.info("💡 The ledger is empty. Create some entries first.")
+        else:
+            select_options = [f"{row['ID']} - {row['Description']} (Rs. {row['Amount']:.2f})" for _, row in df.iterrows()]
+            selected_option = st.selectbox("Select Transaction to Edit", options=select_options)
+            
+            selected_id = selected_option.split(" - ")[0]
+            selected_row = df[df["ID"] == selected_id].iloc[0]
+            
+            with st.form("update_transaction_form"):
+                st.markdown(f"**Editing Transaction: `{selected_id}`**")
+                col_u1, col_u2, col_u3 = st.columns(3)
+                
+                with col_u1:
+                    val = selected_row["Date"]
+                    if isinstance(val, (datetime.date, datetime.datetime)):
+                        orig_date = val
+                    else:
+                        try:
+                            orig_date = datetime.datetime.strptime(str(val), "%Y-%m-%d").date()
+                        except Exception:
+                            orig_date = datetime.date.today()
+                    u_date = st.date_input("Date", value=orig_date)
+                    u_type = st.selectbox("Type", options=["Debit", "Credit"], index=0 if selected_row["Type"] == "Debit" else 1)
+                    
+                with col_u2:
+                    cat_idx = CATEGORIES.index(selected_row["Category"]) if selected_row["Category"] in CATEGORIES else 0
+                    u_category = st.selectbox("Category", options=CATEGORIES, index=cat_idx)
+                    u_amount = st.number_input("Amount (Rs.)", min_value=0.01, value=float(selected_row["Amount"]), step=10.0, format="%.2f")
+                    
+                with col_u3:
+                    u_desc = st.text_input("Description", value=selected_row["Description"])
+                    
+                update_btn = st.form_submit_button("📝 Apply Changes")
+                
+                if update_btn:
+                    if not u_desc.strip():
+                        st.error("❌ Description cannot be blank!")
+                    else:
+                        updated_df = df.copy()
+                        row_idx = updated_df[updated_df["ID"] == selected_id].index[0]
+                        final_u_type = u_type
+                        if u_category == "Cash Withdrawal":
+                            final_u_type = "Debit"
+                            st.toast("ℹ️ Automatically forced to Debit (DR) for Cash Withdrawal.")
+                        
+                        updated_df.at[row_idx, "Date"] = u_date.strftime("%Y-%m-%d")
+                        updated_df.at[row_idx, "Type"] = final_u_type
+                        updated_df.at[row_idx, "Category"] = u_category
+                        updated_df.at[row_idx, "Amount"] = round(u_amount, 2)
+                        updated_df.at[row_idx, "Description"] = u_desc.strip()
+                        
+                        if st.session_state.mode == "live":
+                            try:
+                                conn.update(data=updated_df)
+                                st.success(f"🎉 Updated transaction `{selected_id}` in Google Sheets!")
+                                force_refresh()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Failed to save update: {e}")
+                        else:
+                            st.session_state.demo_df = updated_df
+                            st.success(f"🎉 Updated transaction `{selected_id}` in Sandbox memory!")
+                            st.rerun()
+
+    with tab_delete:
+        st.markdown("### ❌ Delete a Ledger Entry")
+        if df.empty:
+            st.info("💡 The ledger is empty.")
+        else:
+            delete_options = [f"{row['ID']} - {row['Description']} (Rs. {row['Amount']:.2f})" for _, row in df.iterrows()]
+            delete_selection = st.selectbox("Select Transaction to Delete", options=delete_options, key="del_select")
+            
+            delete_id = delete_selection.split(" - ")[0]
+            delete_row = df[df["ID"] == delete_id].iloc[0]
+            
+            st.warning(f"""
+            **⚠️ Are you sure you want to permanently delete this transaction?**
+            - **ID:** `{delete_row['ID']}`
+            - **Description:** `{delete_row['Description']}`
+            - **Amount:** `Rs. {delete_row['Amount']:.2f}`
+            """)
+            
             confirm_delete = st.button("🔴 Yes, Delete", use_container_width=True)
-            
-        if confirm_delete:
-            # Filter out deleted record
-            updated_df = df[df["ID"] != delete_id].copy()
-            
-            # Save
-            if st.session_state.mode == "live":
-                try:
-                    conn.update(data=updated_df)
-                    st.success(f"🗑️ Successfully deleted transaction `{delete_id}` from Google Sheets!")
-                    force_refresh()
+            if confirm_delete:
+                updated_df = df[df["ID"] != delete_id].copy()
+                if st.session_state.mode == "live":
+                    try:
+                        conn.update(data=updated_df)
+                        st.success(f"🗑️ Successfully deleted transaction `{delete_id}` from Google Sheets!")
+                        force_refresh()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Failed to delete record: {e}")
+                else:
+                    st.session_state.demo_df = updated_df
+                    st.success(f"🗑️ Successfully deleted transaction `{delete_id}` from Sandbox!")
                     st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Failed to delete record: {e}")
-            else:
-                st.session_state.demo_df = updated_df
-                st.success(f"🗑️ Successfully deleted transaction `{delete_id}` from Sandbox!")
-                st.rerun()
 
-# ==============================================================================
-# END DAY CLOSING & PDF GENERATOR
-# ==============================================================================
-st.markdown("---")
-st.markdown("### 🏁 End Day Account Statement Generator")
-
-# Interactive End Day section
-with st.container():
-    st.markdown("""
-        <div style='background: #ffffff; border: 1px solid #cbd5e1; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-top: 15px;'>
-            <h4 style='margin-top: 0; color: #0f172a; font-family: "Outfit", sans-serif; font-size: 1.25rem;'>🏁 End Day Closing & PDF Statement</h4>
-            <p style='color: #64748b; font-size: 0.9rem; margin-bottom: 20px;'>
-                Finalize records for a chosen business day. This tool will calculate the opening balance, daily credits/debits, closing balance, and generate a downloadable professional PDF statement.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
+    # End Day Closing & PDF Generator
+    st.markdown("---")
+    st.markdown("### 🏁 End Day Account Statement Generator")
     
-    col_e1, col_e2 = st.columns([1, 2])
-    with col_e1:
-        end_day_date = st.date_input("Select Statement Date", value=datetime.date.today(), key="end_day_date_picker")
-        
-        # Calculate daily entries and totals
-        prior_tx = df[df["Date"] < end_day_date] if not df.empty else pd.DataFrame()
-        prior_credits = prior_tx[(prior_tx["Type"] == "Credit") & (prior_tx["Category"] != "Opening Balance")]["Amount"].sum() if not prior_tx.empty else 0.0
-        prior_debits = prior_tx[(prior_tx["Type"] == "Debit") & (prior_tx["Category"] != "Opening Balance")]["Amount"].sum() if not prior_tx.empty else 0.0
-        
-        day_opening_balance = opening_balance + prior_credits - prior_debits
-        
-        day_tx = df[df["Date"] == end_day_date] if not df.empty else pd.DataFrame()
-        day_credits = day_tx[day_tx["Type"] == "Credit"]["Amount"].sum() if not day_tx.empty else 0.0
-        day_debits = day_tx[day_tx["Type"] == "Debit"]["Amount"].sum() if not day_tx.empty else 0.0
-        day_closing_balance = day_opening_balance + day_credits - day_debits
-        
-        # Add button to trigger PDF generation
-        pdf_bytes = create_pdf_report_safe(day_tx, end_day_date, day_opening_balance, day_credits, day_debits, day_closing_balance)
-        
-        st.download_button(
-            label="📄 Download A4 PDF Statement",
-            data=pdf_bytes,
-            file_name=f"DR_CR_Ledger_Statement_{end_day_date.strftime('%Y-%m-%d')}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-        
-    with col_e2:
-        # Live visual preview of the daily account statement metrics
-        st.markdown(f"""
-            <div style='background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;'>
-                <div style='font-weight: 700; font-size: 0.95rem; color: #1e293b; margin-bottom: 12px; display: flex; justify-content: space-between;'>
-                    <span>📊 Statement Preview Summary</span>
-                    <span style='color: #4f46e5;'>{end_day_date.strftime('%Y-%m-%d')}</span>
-                </div>
-                <div style='display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;'>
-                    <div style='background: #ffffff; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px;'>
-                        <span style='font-size: 0.75rem; color: #64748b; font-weight:600; text-transform:uppercase;'>Opening Balance</span>
-                        <div style='font-size: 1.1rem; font-weight: 700; color: #0f172a; margin-top: 4px;'>Rs. {day_opening_balance:,.2f}</div>
-                    </div>
-                    <div style='background: #ffffff; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px; border-left: 3px solid #10b981;'>
-                        <span style='font-size: 0.75rem; color: #10b981; font-weight:600; text-transform:uppercase;'>Daily Inflow (CR)</span>
-                        <div style='font-size: 1.1rem; font-weight: 700; color: #10b981; margin-top: 4px;'>Rs. {day_credits:,.2f}</div>
-                    </div>
-                    <div style='background: #ffffff; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px; border-left: 3px solid #ef4444;'>
-                        <span style='font-size: 0.75rem; color: #ef4444; font-weight:600; text-transform:uppercase;'>Daily Outflow (DR)</span>
-                        <div style='font-size: 1.1rem; font-weight: 700; color: #ef4444; margin-top: 4px;'>Rs. {day_debits:,.2f}</div>
-                    </div>
-                    <div style='background: #ffffff; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px; border-left: 3px solid #4f46e5;'>
-                        <span style='font-size: 0.75rem; color: #4f46e5; font-weight:600; text-transform:uppercase;'>Closing Balance</span>
-                        <div style='font-size: 1.1rem; font-weight: 700; color: #4f46e5; margin-top: 4px;'>Rs. {day_closing_balance:,.2f}</div>
-                    </div>
-                </div>
-                <div style='font-size: 0.8rem; color: #64748b; margin-top: 12px; border-top: 1px dashed #cbd5e1; padding-top: 12px; display: flex; justify-content: space-between;'>
-                    <span>Total Daily Entries: <b>{len(day_tx)}</b></span>
-                    <span>Reconciliation: <b>Verified ✓</b></span>
-                </div>
+    with st.container():
+        st.markdown("""
+            <div style='background: #ffffff; border: 1px solid #cbd5e1; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-top: 15px;'>
+                <h4 style='margin-top: 0; color: #0f172a; font-family: "Outfit", sans-serif; font-size: 1.25rem;'>🏁 End Day Closing & PDF Statement</h4>
+                <p style='color: #64748b; font-size: 0.9rem; margin-bottom: 20px;'>
+                    Finalize records for a chosen business day. This tool will calculate the opening balance, daily credits/debits, closing balance, and generate a downloadable professional PDF statement.
+                </p>
             </div>
         """, unsafe_allow_html=True)
+        
+        col_e1, col_e2 = st.columns([1, 2])
+        with col_e1:
+            end_day_date = st.date_input("Select Statement Date", value=datetime.date.today(), key="end_day_date_picker")
+            
+            prior_tx = df[df["Date"] < end_day_date] if not df.empty else pd.DataFrame()
+            prior_credits = prior_tx[(prior_tx["Type"] == "Credit") & (prior_tx["Category"] != "Opening Balance")]["Amount"].sum() if not prior_tx.empty else 0.0
+            prior_debits = prior_tx[(prior_tx["Type"] == "Debit") & (prior_tx["Category"] != "Opening Balance")]["Amount"].sum() if not prior_tx.empty else 0.0
+            
+            day_opening_balance = opening_balance + prior_credits - prior_debits
+            
+            day_tx = df[df["Date"] == end_day_date] if not df.empty else pd.DataFrame()
+            day_credits = day_tx[day_tx["Type"] == "Credit"]["Amount"].sum() if not day_tx.empty else 0.0
+            day_debits = day_tx[day_tx["Type"] == "Debit"]["Amount"].sum() if not day_tx.empty else 0.0
+            day_closing_balance = day_opening_balance + day_credits - day_debits
+            
+            pdf_bytes = create_pdf_report_safe(day_tx, end_day_date, day_opening_balance, day_credits, day_debits, day_closing_balance)
+            
+            st.download_button(
+                label="📄 Download A4 PDF Statement",
+                data=pdf_bytes,
+                file_name=f"DR_CR_Ledger_Statement_{end_day_date.strftime('%Y-%m-%d')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+            
+        with col_e2:
+            st.markdown(f"""
+                <div style='background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;'>
+                    <div style='font-weight: 700; font-size: 0.95rem; color: #1e293b; margin-bottom: 12px; display: flex; justify-content: space-between;'>
+                        <span>📊 Statement Preview Summary</span>
+                        <span style='color: #4f46e5;'>{end_day_date.strftime('%Y-%m-%d')}</span>
+                    </div>
+                    <div style='display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;'>
+                        <div style='background: #ffffff; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px;'>
+                            <span style='font-size: 0.75rem; color: #64748b; font-weight:600; text-transform:uppercase;'>Opening Balance</span>
+                            <div style='font-size: 1.1rem; font-weight: 700; color: #0f172a; margin-top: 4px;'>Rs. {day_opening_balance:,.2f}</div>
+                        </div>
+                        <div style='background: #ffffff; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px; border-left: 3px solid #10b981;'>
+                            <span style='font-size: 0.75rem; color: #10b981; font-weight:600; text-transform:uppercase;'>Daily Inflow (CR)</span>
+                            <div style='font-size: 1.1rem; font-weight: 700; color: #10b981; margin-top: 4px;'>Rs. {day_credits:,.2f}</div>
+                        </div>
+                        <div style='background: #ffffff; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px; border-left: 3px solid #ef4444;'>
+                            <span style='font-size: 0.75rem; color: #ef4444; font-weight:600; text-transform:uppercase;'>Daily Outflow (DR)</span>
+                            <div style='font-size: 1.1rem; font-weight: 700; color: #ef4444; margin-top: 4px;'>Rs. {day_debits:,.2f}</div>
+                        </div>
+                        <div style='background: #ffffff; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px; border-left: 3px solid #4f46e5;'>
+                            <span style='font-size: 0.75rem; color: #4f46e5; font-weight:600; text-transform:uppercase;'>Closing Balance</span>
+                            <div style='font-size: 1.1rem; font-weight: 700; color: #4f46e5; margin-top: 4px;'>Rs. {day_closing_balance:,.2f}</div>
+                        </div>
+                    </div>
+                    <div style='font-size: 0.8rem; color: #64748b; margin-top: 12px; border-top: 1px dashed #cbd5e1; padding-top: 12px; display: flex; justify-content: space-between;'>
+                        <span>Total Daily Entries: <b>{len(day_tx)}</b></span>
+                        <span>Reconciliation: <b>Verified ✓</b></span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-# ==============================================================================
-# SECRETS AUTOMATED BUILDER (FOR NEW USERS)
-# ==============================================================================
-if not secrets_configured:
-    st.markdown("---")
-    st.markdown("## 🔑 Credentials TOML Builder")
-    st.markdown("Copy your Google Cloud Service Account JSON contents and convert them to the proper Streamlit TOML structure below.")
-    
-    with st.expander("🛠️ Interactive Secrets Generator"):
-        st.info("Input your credentials below to generate a valid `secrets.toml` content you can copy directly!")
-        
-        sheet_url = st.text_input("Spreadsheet URL", value="https://docs.google.com/spreadsheets/d/your-spreadsheet-id/edit")
-        p_id = st.text_input("Project ID (project_id)", value="my-gcp-project-12345")
-        pk_id = st.text_input("Private Key ID (private_key_id)", value="a1b2c3d4e5f6g7h8")
-        pk = st.text_area("Private Key (private_key)", placeholder="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBg...\n-----END PRIVATE KEY-----\n")
-        email = st.text_input("Client Email (client_email)", value="service-account@my-gcp-project-12345.iam.gserviceaccount.com")
-        c_id = st.text_input("Client ID (client_id)", value="102938475647382910293")
-        
-        # Pre-format to avoid f-string backslash limitations in Python < 3.12
-        formatted_pk = pk.replace('\n', '\\n') if pk else '-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n'
-        escaped_email = email.replace('@', '%40') if email else ''
-        
-        # Build TOML string
-        generated_toml = f"""[connections.gsheets]
+    if not secrets_configured:
+        st.markdown("---")
+        st.markdown("## 🔑 Credentials TOML Builder")
+        with st.expander("🛠️ Interactive Secrets Generator"):
+            sheet_url = st.text_input("Spreadsheet URL", value="https://docs.google.com/spreadsheets/d/your-spreadsheet-id/edit")
+            p_id = st.text_input("Project ID (project_id)", value="my-gcp-project-12345")
+            pk_id = st.text_input("Private Key ID (private_key_id)", value="a1b2c3d4e5f6g7h8")
+            pk = st.text_area("Private Key (private_key)")
+            email = st.text_input("Client Email (client_email)")
+            c_id = st.text_input("Client ID (client_id)")
+            
+            formatted_pk = pk.replace('\n', '\\n') if pk else '-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n'
+            escaped_email = email.replace('@', '%40') if email else ''
+            
+            generated_toml = f"""[connections.gsheets]
 spreadsheet = "{sheet_url}"
 type = "service_account"
 project_id = "{p_id}"
@@ -1133,5 +1056,368 @@ token_uri = "https://oauth2.googleapis.com/token"
 auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
 client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/{escaped_email}"
 """
-        st.code(generated_toml, language="toml")
-        st.caption("ℹ️ Copy this generated snippet and paste it inside `.streamlit/secrets.toml` in your project workspace.")
+            st.code(generated_toml, language="toml")
+
+
+# ==============================================================================
+# RENDER PAGE: 🤝 DEBTS & CREDITS (UDHARO TRACKER)
+# ==============================================================================
+else:
+    # Reload fresh data
+    load_udharo_data()
+    
+    sales_df = st.session_state.sales_df
+    purchases_df = st.session_state.purchases_df
+    
+    # Header Banner - Specialized for Udharo Tracker
+    st.markdown("""
+        <div class="header-banner" style="margin-bottom: 20px; padding: 25px 35px; background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);">
+            <div class="header-title" style="font-size: 2.0rem;">🤝 Debts & Credits (Udharo Tracker)</div>
+            <div class="header-subtitle" style="font-size: 0.95rem;">Track Customer Receivables & Supplier Payables with Simple Local-Friendly Debt Settlement</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 1. High-Contrast Metric Cards (Side-by-side)
+    # Sum of customer Balance_Due (Receivables - where type is 'Udharo')
+    active_sales_udharo = sales_df[sales_df["Type"] == "Udharo"] if not sales_df.empty else pd.DataFrame()
+    to_receive = active_sales_udharo["Balance_Due"].sum() if not active_sales_udharo.empty else 0.0
+    
+    # Sum of supplier Balance_Due (Payables - where type is 'Udharo')
+    active_purchases_udharo = purchases_df[purchases_df["Type"] == "Udharo"] if not purchases_df.empty else pd.DataFrame()
+    to_pay = active_purchases_udharo["Balance_Due"].sum() if not active_purchases_udharo.empty else 0.0
+    
+    st.markdown(f"""
+        <div class="metric-card-container">
+            <div class="metric-card credit-accent" style="border-left-color: #10b981;">
+                <div class="metric-title" style="color: #0f766e;">📥 Total to Receive (Customer Debts)</div>
+                <div class="metric-value" style="color: #10b981;">Rs. {to_receive:,.2f}</div>
+                <span class="metric-badge" style="background-color: rgba(16, 185, 129, 0.1); color: #10b981;">Payment Receivables</span>
+            </div>
+            <div class="metric-card debit-accent" style="border-left-color: #ef4444;">
+                <div class="metric-title" style="color: #9f1239;">📤 Total to Pay (Supplier Obligations)</div>
+                <div class="metric-value" style="color: #ef4444;">Rs. {to_pay:,.2f}</div>
+                <span class="metric-badge" style="background-color: rgba(239, 68, 68, 0.1); color: #ef4444;">Supplier Payables</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 2. Interactive Ledger Tabs
+    tab_cust, tab_supp = st.tabs(["👥 Customer Receivables", "🏢 Supplier Payables"])
+    
+    # --- CUSTOMER RECEIVABLES TAB ---
+    with tab_cust:
+        st.markdown("### 👥 Customer Receivables (Outstanding Debts)")
+        
+        col_c_left, col_c_right = st.columns([2, 1])
+        
+        with col_c_left:
+            # Search bar
+            search_cust = st.text_input("🔍 Search Customer by Name or Phone", placeholder="Type name or phone number...", key="search_cust_input")
+            
+            # Filter active receivables (Balance_Due > 0)
+            cust_table_df = sales_df[sales_df["Balance_Due"] > 0].copy() if not sales_df.empty else pd.DataFrame()
+            if not cust_table_df.empty:
+                cust_table_df["Customer_Phone"] = cust_table_df["Customer_Phone"].fillna("").astype(str).str.replace(r"\.0$", "", regex=True)
+            
+            if search_cust and not cust_table_df.empty:
+                cust_table_df = cust_table_df[
+                    cust_table_df["Customer_Name"].str.contains(search_cust, case=False, na=False) |
+                    cust_table_df["Customer_Phone"].str.contains(search_cust, case=False, na=False)
+                ]
+                
+            st.markdown(f"**Found {len(cust_table_df)} outstanding customer debt records**")
+            
+            if not cust_table_df.empty:
+                st.data_editor(
+                    cust_table_df,
+                    column_config={
+                        "Date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
+                        "Customer_Name": st.column_config.TextColumn("Customer Name", width="medium"),
+                        "Customer_Phone": st.column_config.TextColumn("Phone Number"),
+                        "Total_Amount": st.column_config.NumberColumn("Total Amount (Rs.)", format="Rs. %.2f"),
+                        "Amount_Paid": st.column_config.NumberColumn("Amount Paid (Rs.)", format="Rs. %.2f"),
+                        "Balance_Due": st.column_config.NumberColumn("Balance Due (Rs.)", format="Rs. %.2f"),
+                        "Type": st.column_config.TextColumn("Status"),
+                        "ID": st.column_config.TextColumn("ID", disabled=True)
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    disabled=True,
+                    key="cust_outstanding_table"
+                )
+            else:
+                st.info("🎉 All clear! No outstanding customer receivables found.")
+                
+            # Expandable form to add new Sales entry (Cash or Credit/Udharo)
+            with st.expander("➕ Record New Customer Sale (Cash or Udharo)"):
+                with st.form("new_sale_form", clear_on_submit=True):
+                    col_fs1, col_fs2 = st.columns(2)
+                    with col_fs1:
+                        c_name = st.text_input("Customer Name *")
+                        c_phone = st.text_input("Customer Phone")
+                        c_date = st.date_input("Sale Date", value=datetime.date.today())
+                    with col_fs2:
+                        c_total = st.number_input("Total Amount (Rs.) *", min_value=0.01, step=100.0, value=1000.0)
+                        c_paid = st.number_input("Amount Paid (Rs.)", min_value=0.00, step=100.0, value=0.0)
+                        c_is_credit = st.checkbox("Sale on Credit (Udharo)", value=True)
+                        
+                    submit_sale = st.form_submit_button("💾 Save Customer Sale")
+                    
+                    if submit_sale:
+                        if not c_name.strip():
+                            st.error("❌ Customer Name is required!")
+                        elif c_paid > c_total:
+                            st.error("❌ Amount Paid cannot be greater than Total Amount!")
+                        else:
+                            try:
+                                if st.session_state.mode == "live":
+                                    db_logic.append_sales_record(
+                                        customer_name=c_name,
+                                        customer_phone=c_phone,
+                                        total_amount=c_total,
+                                        amount_paid=c_paid,
+                                        is_credit=c_is_credit,
+                                        date=c_date
+                                    )
+                                    st.success(f"🎉 Successfully recorded sale to Google Sheets!")
+                                else:
+                                    # Sandbox mock append
+                                    tx_id = f"tx-s-mock-{uuid.uuid4().hex[:4]}"
+                                    total_val = round(float(c_total), 2)
+                                    paid_val = round(float(c_paid), 2)
+                                    due_val = round(total_val - paid_val, 2)
+                                    tx_type = "Udharo" if c_is_credit else "Cash"
+                                    new_entry = {
+                                        "Date": c_date,
+                                        "Customer_Name": c_name.strip(),
+                                        "Customer_Phone": c_phone.strip(),
+                                        "Total_Amount": total_val,
+                                        "Amount_Paid": paid_val,
+                                        "Balance_Due": due_val,
+                                        "ID": tx_id,
+                                        "Type": tx_type
+                                    }
+                                    st.session_state.sales_df = pd.concat([sales_df, pd.DataFrame([new_entry])], ignore_index=True)
+                                    st.success(f"🎉 Successfully recorded sale to Sandbox memory!")
+                                load_udharo_data(force=True)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Failed to record sale: {e}")
+                                
+        with col_c_right:
+            st.markdown("### 💳 Debt Settlements")
+            st.markdown("Settle customer debts here.")
+            
+            outstanding_custs = sales_df[sales_df["Balance_Due"] > 0].copy() if not sales_df.empty else pd.DataFrame()
+            
+            if outstanding_custs.empty:
+                st.info("No customer debt to settle.")
+            else:
+                cust_options = [f"{row['ID']} - {row['Customer_Name']} (Owes Rs. {row['Balance_Due']:.2f})" for _, row in outstanding_custs.iterrows()]
+                selected_cust_opt = st.selectbox("Select Customer to Settle", options=cust_options)
+                
+                selected_cust_id = selected_cust_opt.split(" - ")[0]
+                selected_cust_row = outstanding_custs[outstanding_custs["ID"] == selected_cust_id].iloc[0]
+                
+                c_settle_amount = st.number_input(
+                    "Amount Settled (Rs.)", 
+                    min_value=0.01, 
+                    max_value=float(selected_cust_row["Balance_Due"]), 
+                    value=float(selected_cust_row["Balance_Due"]), 
+                    step=10.0,
+                    key="cust_settle_input"
+                )
+                
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("💸 Partially Settle", use_container_width=True):
+                        try:
+                            if st.session_state.mode == "live":
+                                db_logic.settle_customer_debt(selected_cust_id, c_settle_amount)
+                                st.success("🎉 Google Sheet updated successfully!")
+                            else:
+                                df_s = st.session_state.sales_df
+                                idx = df_s[df_s["ID"] == selected_cust_id].index[0]
+                                df_s.at[idx, "Amount_Paid"] = round(float(df_s.at[idx, "Amount_Paid"]) + c_settle_amount, 2)
+                                df_s.at[idx, "Balance_Due"] = round(float(df_s.at[idx, "Total_Amount"]) - float(df_s.at[idx, "Amount_Paid"]), 2)
+                                st.success("🎉 Sandbox updated successfully!")
+                            load_udharo_data(force=True)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error settling: {e}")
+                            
+                with col_btn2:
+                    if st.button("✅ Clear Debt", type="primary", use_container_width=True):
+                        try:
+                            if st.session_state.mode == "live":
+                                db_logic.clear_customer_debt(selected_cust_id)
+                                st.success("🎉 Debt fully cleared in Google Sheet!")
+                            else:
+                                df_s = st.session_state.sales_df
+                                idx = df_s[df_s["ID"] == selected_cust_id].index[0]
+                                df_s.at[idx, "Amount_Paid"] = df_s.at[idx, "Total_Amount"]
+                                df_s.at[idx, "Balance_Due"] = 0.0
+                                st.success("🎉 Debt fully cleared in Sandbox!")
+                            load_udharo_data(force=True)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error clearing: {e}")
+
+    # --- SUPPLIER PAYABLES TAB ---
+    with tab_supp:
+        st.markdown("### 🏢 Supplier Payables (Outstanding Debts)")
+        
+        col_p_left, col_p_right = st.columns([2, 1])
+        
+        with col_p_left:
+            # Search bar
+            search_supp = st.text_input("🔍 Search Supplier by Name or Phone", placeholder="Type name or phone number...", key="search_supp_input")
+            
+            # Filter active payables (Balance_Due > 0)
+            supp_table_df = purchases_df[purchases_df["Balance_Due"] > 0].copy() if not purchases_df.empty else pd.DataFrame()
+            if not supp_table_df.empty:
+                supp_table_df["Supplier_Phone"] = supp_table_df["Supplier_Phone"].fillna("").astype(str).str.replace(r"\.0$", "", regex=True)
+            
+            if search_supp and not supp_table_df.empty:
+                supp_table_df = supp_table_df[
+                    supp_table_df["Supplier_Name"].str.contains(search_supp, case=False, na=False) |
+                    supp_table_df["Supplier_Phone"].str.contains(search_supp, case=False, na=False)
+                ]
+                
+            st.markdown(f"**Found {len(supp_table_df)} outstanding supplier debt obligations**")
+            
+            if not supp_table_df.empty:
+                st.data_editor(
+                    supp_table_df,
+                    column_config={
+                        "Date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
+                        "Supplier_Name": st.column_config.TextColumn("Supplier Name", width="medium"),
+                        "Supplier_Phone": st.column_config.TextColumn("Phone Number"),
+                        "Total_Amount": st.column_config.NumberColumn("Total Amount (Rs.)", format="Rs. %.2f"),
+                        "Amount_Paid": st.column_config.NumberColumn("Amount Paid (Rs.)", format="Rs. %.2f"),
+                        "Balance_Due": st.column_config.NumberColumn("Balance Due (Rs.)", format="Rs. %.2f"),
+                        "Type": st.column_config.TextColumn("Status"),
+                        "ID": st.column_config.TextColumn("ID", disabled=True)
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    disabled=True,
+                    key="supp_outstanding_table"
+                )
+            else:
+                st.info("🎉 Excellent! We owe no money to any suppliers.")
+                
+            # Expandable form to add new Purchases entry (Cash or Credit/Udharo)
+            with st.expander("➕ Record New Supplier Purchase (Cash or Udharo)"):
+                with st.form("new_purchase_form", clear_on_submit=True):
+                    col_fp1, col_fp2 = st.columns(2)
+                    with col_fp1:
+                        p_name = st.text_input("Supplier Name *")
+                        p_phone = st.text_input("Supplier Phone")
+                        p_date = st.date_input("Purchase Date", value=datetime.date.today())
+                    with col_fp2:
+                        p_total = st.number_input("Total Amount (Rs.) *", min_value=0.01, step=100.0, value=1000.0)
+                        p_paid = st.number_input("Amount Paid (Rs.)", min_value=0.00, step=100.0, value=0.0)
+                        p_is_credit = st.checkbox("Purchase on Credit (Udharo)", value=True)
+                        
+                    submit_purchase = st.form_submit_button("💾 Save Supplier Purchase")
+                    
+                    if submit_purchase:
+                        if not p_name.strip():
+                            st.error("❌ Supplier Name is required!")
+                        elif p_paid > p_total:
+                            st.error("❌ Amount Paid cannot be greater than Total Amount!")
+                        else:
+                            try:
+                                if st.session_state.mode == "live":
+                                    db_logic.append_purchases_record(
+                                        supplier_name=p_name,
+                                        supplier_phone=p_phone,
+                                        total_amount=p_total,
+                                        amount_paid=p_paid,
+                                        is_credit=p_is_credit,
+                                        date=p_date
+                                    )
+                                    st.success(f"🎉 Successfully recorded purchase to Google Sheets!")
+                                else:
+                                    # Sandbox mock append
+                                    tx_id = f"tx-p-mock-{uuid.uuid4().hex[:4]}"
+                                    total_val = round(float(p_total), 2)
+                                    paid_val = round(float(p_paid), 2)
+                                    due_val = round(total_val - paid_val, 2)
+                                    tx_type = "Udharo" if p_is_credit else "Cash"
+                                    new_entry = {
+                                        "Date": p_date,
+                                        "Supplier_Name": p_name.strip(),
+                                        "Supplier_Phone": p_phone.strip(),
+                                        "Total_Amount": total_val,
+                                        "Amount_Paid": paid_val,
+                                        "Balance_Due": due_val,
+                                        "ID": tx_id,
+                                        "Type": tx_type
+                                    }
+                                    st.session_state.purchases_df = pd.concat([purchases_df, pd.DataFrame([new_entry])], ignore_index=True)
+                                    st.success(f"🎉 Successfully recorded purchase to Sandbox memory!")
+                                load_udharo_data(force=True)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Failed to record purchase: {e}")
+                                
+        with col_p_right:
+            st.markdown("### 🏢 Debt Payments")
+            st.markdown("Settle supplier debts here.")
+            
+            outstanding_supps = purchases_df[purchases_df["Balance_Due"] > 0].copy() if not purchases_df.empty else pd.DataFrame()
+            
+            if outstanding_supps.empty:
+                st.info("No supplier debt obligations to pay.")
+            else:
+                supp_options = [f"{row['ID']} - {row['Supplier_Name']} (We Owe Rs. {row['Balance_Due']:.2f})" for _, row in outstanding_supps.iterrows()]
+                selected_supp_opt = st.selectbox("Select Supplier to Settle", options=supp_options)
+                
+                selected_supp_id = selected_supp_opt.split(" - ")[0]
+                selected_supp_row = outstanding_supps[outstanding_supps["ID"] == selected_supp_id].iloc[0]
+                
+                p_settle_amount = st.number_input(
+                    "Amount Paid (Rs.)", 
+                    min_value=0.01, 
+                    max_value=float(selected_supp_row["Balance_Due"]), 
+                    value=float(selected_supp_row["Balance_Due"]), 
+                    step=10.0,
+                    key="supp_settle_input"
+                )
+                
+                col_pbtn1, col_pbtn2 = st.columns(2)
+                with col_pbtn1:
+                    if st.button("💸 Partially Pay", use_container_width=True, key="supp_part_pay_btn"):
+                        try:
+                            if st.session_state.mode == "live":
+                                db_logic.settle_supplier_debt(selected_supp_id, p_settle_amount)
+                                st.success("🎉 Google Sheet updated successfully!")
+                            else:
+                                df_p = st.session_state.purchases_df
+                                idx = df_p[df_p["ID"] == selected_supp_id].index[0]
+                                df_p.at[idx, "Amount_Paid"] = round(float(df_p.at[idx, "Amount_Paid"]) + p_settle_amount, 2)
+                                df_p.at[idx, "Balance_Due"] = round(float(df_p.at[idx, "Total_Amount"]) - float(df_p.at[idx, "Amount_Paid"]), 2)
+                                st.success("🎉 Sandbox updated successfully!")
+                            load_udharo_data(force=True)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error settling: {e}")
+                            
+                with col_pbtn2:
+                    if st.button("✅ Clear Obligation", type="primary", use_container_width=True, key="supp_clear_pay_btn"):
+                        try:
+                            if st.session_state.mode == "live":
+                                db_logic.clear_supplier_debt(selected_supp_id)
+                                st.success("🎉 Debt fully cleared in Google Sheet!")
+                            else:
+                                df_p = st.session_state.purchases_df
+                                idx = df_p[df_p["ID"] == selected_supp_id].index[0]
+                                df_p.at[idx, "Amount_Paid"] = df_p.at[idx, "Total_Amount"]
+                                df_p.at[idx, "Balance_Due"] = 0.0
+                                st.success("🎉 Debt fully cleared in Sandbox!")
+                            load_udharo_data(force=True)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error clearing: {e}")
