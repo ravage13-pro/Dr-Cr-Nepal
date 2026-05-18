@@ -448,9 +448,9 @@ df["Description"] = df["Description"].fillna("No details provided")
 # SPECIALIZED UDHARO TRACKER STATE INITIALIZATION & CACHING
 # ==============================================================================
 if "sales_df" not in st.session_state:
-    st.session_state.sales_df = pd.DataFrame(columns=["Date", "Customer_Name", "Customer_Phone", "Total_Amount", "Amount_Paid", "Balance_Due", "ID", "Type"])
+    st.session_state.sales_df = pd.DataFrame(columns=["Date", "Customer_Name", "Customer_Phone", "Total_Amount", "Amount_Paid", "Balance_Due", "ID", "Type", "Payment_Method", "Cheque_Details"])
 if "purchases_df" not in st.session_state:
-    st.session_state.purchases_df = pd.DataFrame(columns=["Date", "Supplier_Name", "Supplier_Phone", "Total_Amount", "Amount_Paid", "Balance_Due", "ID", "Type"])
+    st.session_state.purchases_df = pd.DataFrame(columns=["Date", "Supplier_Name", "Supplier_Phone", "Total_Amount", "Amount_Paid", "Balance_Due", "ID", "Type", "Payment_Method", "Cheque_Details"])
 
 def load_udharo_data(force=False):
     if st.session_state.mode == "live":
@@ -465,16 +465,16 @@ def load_udharo_data(force=False):
             st.error(f"Error loading Udharo data: {e}")
     else:
         # Mock sandbox data if empty
-        if force or st.session_state.sales_df.empty:
+        if st.session_state.sales_df.empty:
             st.session_state.sales_df = pd.DataFrame([
-                {"Date": datetime.date.today(), "Customer_Name": "Ramesh Adhikari", "Customer_Phone": "9851098765", "Total_Amount": 25000.0, "Amount_Paid": 10000.0, "Balance_Due": 15000.0, "ID": "tx-s-mock1", "Type": "Udharo"},
-                {"Date": datetime.date.today() - datetime.timedelta(days=2), "Customer_Name": "Sita Thapa", "Customer_Phone": "9841345678", "Total_Amount": 8500.0, "Amount_Paid": 8500.0, "Balance_Due": 0.0, "ID": "tx-s-mock2", "Type": "Cash"},
-                {"Date": datetime.date.today() - datetime.timedelta(days=5), "Customer_Name": "Karan Shrestha", "Customer_Phone": "9812345678", "Total_Amount": 12000.0, "Amount_Paid": 4000.0, "Balance_Due": 8000.0, "ID": "tx-s-mock3", "Type": "Udharo"}
+                {"Date": datetime.date.today(), "Customer_Name": "Ramesh Adhikari", "Customer_Phone": "9851098765", "Total_Amount": 25000.0, "Amount_Paid": 10000.0, "Balance_Due": 15000.0, "ID": "tx-s-mock1", "Type": "Udharo", "Payment_Method": "Udharo", "Cheque_Details": ""},
+                {"Date": datetime.date.today() - datetime.timedelta(days=2), "Customer_Name": "Sita Thapa", "Customer_Phone": "9841345678", "Total_Amount": 8500.0, "Amount_Paid": 8500.0, "Balance_Due": 0.0, "ID": "tx-s-mock2", "Type": "Cash", "Payment_Method": "Cash", "Cheque_Details": ""},
+                {"Date": datetime.date.today() - datetime.timedelta(days=5), "Customer_Name": "Karan Shrestha", "Customer_Phone": "9812345678", "Total_Amount": 12000.0, "Amount_Paid": 4000.0, "Balance_Due": 8000.0, "ID": "tx-s-mock3", "Type": "Udharo", "Payment_Method": "Udharo", "Cheque_Details": ""}
             ])
-        if force or st.session_state.purchases_df.empty:
+        if st.session_state.purchases_df.empty:
             st.session_state.purchases_df = pd.DataFrame([
-                {"Date": datetime.date.today(), "Supplier_Name": "NAASA Tech Supplies", "Supplier_Phone": "014234567", "Total_Amount": 45000.0, "Amount_Paid": 15000.0, "Balance_Due": 30000.0, "ID": "tx-p-mock1", "Type": "Udharo"},
-                {"Date": datetime.date.today() - datetime.timedelta(days=3), "Supplier_Name": "Pooja Stationery", "Supplier_Phone": "9860123456", "Total_Amount": 5000.0, "Amount_Paid": 5000.0, "Balance_Due": 0.0, "ID": "tx-p-mock2", "Type": "Cash"}
+                {"Date": datetime.date.today(), "Supplier_Name": "NAASA Tech Supplies", "Supplier_Phone": "014234567", "Total_Amount": 45000.0, "Amount_Paid": 15000.0, "Balance_Due": 30000.0, "ID": "tx-p-mock1", "Type": "Udharo", "Payment_Method": "Udharo", "Cheque_Details": ""},
+                {"Date": datetime.date.today() - datetime.timedelta(days=3), "Supplier_Name": "Pooja Stationery", "Supplier_Phone": "9860123456", "Total_Amount": 5000.0, "Amount_Paid": 5000.0, "Balance_Due": 0.0, "ID": "tx-p-mock2", "Type": "Cash", "Payment_Method": "Cash", "Cheque_Details": ""}
             ])
 
 # Initial load
@@ -702,6 +702,84 @@ if app_page == "📊 General Cash Ledger":
             </div>
         </div>
     """, unsafe_allow_html=True)
+    # Liquidity Vault Calculations
+    sales_df_l = st.session_state.sales_df.copy()
+    purchases_df_l = st.session_state.purchases_df.copy()
+    
+    # Graceful parsing and cleaning
+    for df_temp in [sales_df_l, purchases_df_l]:
+        if not df_temp.empty:
+            if "Payment_Method" not in df_temp.columns:
+                df_temp["Payment_Method"] = df_temp.apply(lambda row: "Udharo" if row["Type"] == "Udharo" else "Cash", axis=1)
+            else:
+                df_temp["Payment_Method"] = df_temp["Payment_Method"].fillna(df_temp.apply(lambda row: "Udharo" if row["Type"] == "Udharo" else "Cash", axis=1))
+            df_temp["Amount_Paid"] = pd.to_numeric(df_temp["Amount_Paid"], errors="coerce").fillna(0.0)
+            df_temp["Payment_Method"] = df_temp["Payment_Method"].astype(str).str.strip()
+
+    def get_l_sum(df_temp, methods):
+        if df_temp.empty:
+            return 0.0
+        mask = df_temp["Payment_Method"].str.lower().isin([m.lower() for m in methods])
+        return df_temp.loc[mask, "Amount_Paid"].sum()
+
+    # Cash Till: Cash
+    cash_till = get_l_sum(sales_df_l, ["Cash"]) - get_l_sum(purchases_df_l, ["Cash"])
+    
+    # Bank Balance: Bank Transfer or Cheque
+    bank_balance = get_l_sum(sales_df_l, ["Bank Transfer", "Cheque"]) - get_l_sum(purchases_df_l, ["Bank Transfer", "Cheque"])
+    
+    # Fonepay QR Wallet: Fonepay
+    fonepay_wallet = get_l_sum(sales_df_l, ["Fonepay"]) - get_l_sum(purchases_df_l, ["Fonepay"])
+    
+    # eSewa Wallet: eSewa
+    esewa_wallet = get_l_sum(sales_df_l, ["eSewa"]) - get_l_sum(purchases_df_l, ["eSewa"])
+    
+    # Khalti Wallet: Khalti
+    khalti_wallet = get_l_sum(sales_df_l, ["Khalti"]) - get_l_sum(purchases_df_l, ["Khalti"])
+
+    with st.expander("💳 Account Balances", expanded=True):
+        st.markdown("<p style='font-size:0.95rem; color:#475569; margin-top:-5px; font-weight:500;'>Real-time liquid assets reconciled across active payment systems.</p>", unsafe_allow_html=True)
+        col_l1, col_l2, col_l3, col_l4, col_l5 = st.columns(5)
+        
+        with col_l1:
+            st.markdown(f"""
+                <div class="metric-card balance-accent" style="padding:15px; border-left: 5px solid #d97706; background:#fffbeb; box-shadow: 0 4px 15px rgba(217, 119, 6, 0.05);">
+                    <div style="font-size:0.75rem; font-weight:700; color:#b45309; text-transform:uppercase; letter-spacing:0.05em;">💵 Cash Till</div>
+                    <div style="font-size:1.35rem; font-weight:800; color:#78350f; margin-top:5px; font-family:'Outfit', sans-serif;">Rs. {cash_till:,.2f}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with col_l2:
+            st.markdown(f"""
+                <div class="metric-card balance-accent" style="padding:15px; border-left: 5px solid #2563eb; background:#eff6ff; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.05);">
+                    <div style="font-size:0.75rem; font-weight:700; color:#1d4ed8; text-transform:uppercase; letter-spacing:0.05em;">🏦 Bank Balance</div>
+                    <div style="font-size:1.35rem; font-weight:800; color:#1e40af; margin-top:5px; font-family:'Outfit', sans-serif;">Rs. {bank_balance:,.2f}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with col_l3:
+            st.markdown(f"""
+                <div class="metric-card balance-accent" style="padding:15px; border-left: 5px solid #059669; background:#ecfdf5; box-shadow: 0 4px 15px rgba(5, 150, 105, 0.05);">
+                    <div style="font-size:0.75rem; font-weight:700; color:#047857; text-transform:uppercase; letter-spacing:0.05em;">📱 Fonepay QR</div>
+                    <div style="font-size:1.35rem; font-weight:800; color:#065f46; margin-top:5px; font-family:'Outfit', sans-serif;">Rs. {fonepay_wallet:,.2f}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with col_l4:
+            st.markdown(f"""
+                <div class="metric-card balance-accent" style="padding:15px; border-left: 5px solid #4f46e5; background:#eef2ff; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.05);">
+                    <div style="font-size:0.75rem; font-weight:700; color:#4338ca; text-transform:uppercase; letter-spacing:0.05em;">🟢 eSewa Wallet</div>
+                    <div style="font-size:1.35rem; font-weight:800; color:#3730a3; margin-top:5px; font-family:'Outfit', sans-serif;">Rs. {esewa_wallet:,.2f}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with col_l5:
+            st.markdown(f"""
+                <div class="metric-card balance-accent" style="padding:15px; border-left: 5px solid #db2777; background:#fdf2f8; box-shadow: 0 4px 15px rgba(219, 39, 119, 0.05);">
+                    <div style="font-size:0.75rem; font-weight:700; color:#be185d; text-transform:uppercase; letter-spacing:0.05em;">🟣 Khalti Wallet</div>
+                    <div style="font-size:1.35rem; font-weight:800; color:#9d174d; margin-top:5px; font-family:'Outfit', sans-serif;">Rs. {khalti_wallet:,.2f}</div>
+                </div>
+            """, unsafe_allow_html=True)
 
     # Main Tabs
     tab_dashboard, tab_create, tab_update, tab_delete = st.tabs([
@@ -1148,61 +1226,87 @@ else:
             else:
                 st.info("🎉 All clear! No outstanding customer receivables found.")
                 
-            # Expandable form to add new Sales entry (Cash or Credit/Udharo)
-            with st.expander("➕ Record New Customer Sale (Cash or Udharo)"):
-                with st.form("new_sale_form", clear_on_submit=True):
-                    col_fs1, col_fs2 = st.columns(2)
-                    with col_fs1:
-                        c_name = st.text_input("Customer Name *")
-                        c_phone = st.text_input("Customer Phone")
-                        c_date = st.date_input("Sale Date", value=datetime.date.today())
-                    with col_fs2:
-                        c_total = st.number_input("Total Amount (Rs.) *", min_value=0.01, step=100.0, value=1000.0)
-                        c_paid = st.number_input("Amount Paid (Rs.)", min_value=0.00, step=100.0, value=0.0)
-                        c_is_credit = st.checkbox("Sale on Credit (Udharo)", value=True)
-                        
-                    submit_sale = st.form_submit_button("💾 Save Customer Sale")
+            # Expandable form to add new Sales entry (with Dynamic UI Logic)
+            with st.expander("➕ Record New Customer Sale"):
+                col_fs1, col_fs2 = st.columns(2)
+                with col_fs1:
+                    c_date = st.date_input("Sale Date", value=datetime.date.today(), key="sale_date_input")
+                    c_method = st.selectbox(
+                        "Payment Method *",
+                        options=['Cash', 'Cheque', 'Fonepay', 'eSewa', 'Khalti', 'Bank Transfer', 'Udharo'],
+                        index=6,  # Default to Udharo for outstanding receivables context
+                        key="sale_payment_method"
+                    )
                     
-                    if submit_sale:
-                        if not c_name.strip():
-                            st.error("❌ Customer Name is required!")
-                        elif c_paid > c_total:
-                            st.error("❌ Amount Paid cannot be greater than Total Amount!")
-                        else:
-                            try:
-                                if st.session_state.mode == "live":
-                                    db_logic.append_sales_record(
-                                        customer_name=c_name,
-                                        customer_phone=c_phone,
-                                        total_amount=c_total,
-                                        amount_paid=c_paid,
-                                        is_credit=c_is_credit,
-                                        date=c_date
-                                    )
-                                    st.success(f"🎉 Successfully recorded sale to Google Sheets!")
-                                else:
-                                    # Sandbox mock append
-                                    tx_id = f"tx-s-mock-{uuid.uuid4().hex[:4]}"
-                                    total_val = round(float(c_total), 2)
-                                    paid_val = round(float(c_paid), 2)
-                                    due_val = round(total_val - paid_val, 2)
-                                    tx_type = "Udharo" if c_is_credit else "Cash"
-                                    new_entry = {
-                                        "Date": c_date,
-                                        "Customer_Name": c_name.strip(),
-                                        "Customer_Phone": c_phone.strip(),
-                                        "Total_Amount": total_val,
-                                        "Amount_Paid": paid_val,
-                                        "Balance_Due": due_val,
-                                        "ID": tx_id,
-                                        "Type": tx_type
-                                    }
-                                    st.session_state.sales_df = pd.concat([sales_df, pd.DataFrame([new_entry])], ignore_index=True)
-                                    st.success(f"🎉 Successfully recorded sale to Sandbox memory!")
-                                load_udharo_data(force=True)
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Failed to record sale: {e}")
+                    # Optional Cheque Number & Bank Name
+                    c_cheque_details = ""
+                    if c_method == "Cheque":
+                        c_cheque_details = st.text_input("Cheque Number & Bank Name (Optional)", placeholder="E.g., Cheque #45612 - Nabil Bank", key="sale_cheque_details")
+                    
+                    # Required Customer Name and Phone Number only for Udharo
+                    if c_method == "Udharo":
+                        c_name = st.text_input("Customer Name *", key="sale_cust_name")
+                        c_phone = st.text_input("Customer Phone Number *", key="sale_cust_phone")
+                    else:
+                        c_name = st.text_input("Customer Name (Optional)", value="Walk-in Customer", key="sale_cust_name")
+                        c_phone = st.text_input("Customer Phone (Optional)", value="N/A", key="sale_cust_phone")
+
+                with col_fs2:
+                    c_total = st.number_input("Total Amount (Rs.) *", min_value=0.01, step=100.0, value=1000.0, key="sale_total_amount")
+                    if c_method == "Udharo":
+                        c_paid = st.number_input("Amount Paid (Rs.)", min_value=0.00, step=100.0, value=0.0, key="sale_amount_paid")
+                    else:
+                        c_paid = c_total # Automatically fully paid for non-credit sales
+                        st.info(f"ℹ️ Amount Paid automatically set to Total Amount (Rs. {c_total:,.2f}) for non-Udharo sales.")
+
+                submit_sale = st.button("💾 Save Customer Sale", type="primary", use_container_width=True, key="save_sale_btn")
+                
+                if submit_sale:
+                    if c_method == "Udharo" and (not c_name.strip() or not c_phone.strip()):
+                        st.error("❌ Customer Name and Phone Number are required for credit sales (Udharo)!")
+                    elif not c_name.strip():
+                        st.error("❌ Customer Name cannot be empty!")
+                    elif c_paid > c_total:
+                        st.error("❌ Amount Paid cannot be greater than Total Amount!")
+                    else:
+                        try:
+                            if st.session_state.mode == "live":
+                                db_logic.append_sales_record(
+                                    customer_name=c_name,
+                                    customer_phone=c_phone,
+                                    total_amount=c_total,
+                                    amount_paid=c_paid,
+                                    is_credit=(c_method == "Udharo"),
+                                    date=c_date,
+                                    payment_method=c_method,
+                                    cheque_details=c_cheque_details
+                                )
+                                st.success(f"🎉 Successfully recorded sale to Google Sheets!")
+                            else:
+                                # Sandbox mock append
+                                tx_id = f"tx-s-mock-{uuid.uuid4().hex[:4]}"
+                                total_val = round(float(c_total), 2)
+                                paid_val = round(float(c_paid), 2)
+                                due_val = round(total_val - paid_val, 2)
+                                tx_type = "Udharo" if (c_method == "Udharo") else "Cash"
+                                new_entry = {
+                                    "Date": c_date,
+                                    "Customer_Name": c_name.strip(),
+                                    "Customer_Phone": c_phone.strip(),
+                                    "Total_Amount": total_val,
+                                    "Amount_Paid": paid_val,
+                                    "Balance_Due": due_val,
+                                    "ID": tx_id,
+                                    "Type": tx_type,
+                                    "Payment_Method": c_method,
+                                    "Cheque_Details": c_cheque_details
+                                }
+                                st.session_state.sales_df = pd.concat([st.session_state.sales_df, pd.DataFrame([new_entry])], ignore_index=True)
+                                st.success(f"🎉 Successfully recorded sale to Sandbox memory!")
+                            load_udharo_data(force=True)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to record sale: {e}")
                                 
         with col_c_right:
             st.markdown("### 💳 Debt Settlements")
@@ -1219,6 +1323,18 @@ else:
                 selected_cust_id = selected_cust_opt.split(" - ")[0]
                 selected_cust_row = outstanding_custs[outstanding_custs["ID"] == selected_cust_id].iloc[0]
                 
+                # Settle payment method dropdown
+                selected_settle_method = st.selectbox(
+                    "Settlement Method *",
+                    options=['Cash', 'Cheque', 'Fonepay', 'eSewa', 'Khalti', 'Bank Transfer'],
+                    index=0,
+                    key="cust_settle_method"
+                )
+                
+                selected_settle_cheque = ""
+                if selected_settle_method == "Cheque":
+                    selected_settle_cheque = st.text_input("Cheque Details (Optional)", placeholder="E.g., Cheque #98765 - Bank of Kathmandu", key="cust_settle_cheque_details")
+                
                 c_settle_amount = st.number_input(
                     "Amount Settled (Rs.)", 
                     min_value=0.01, 
@@ -1234,12 +1350,38 @@ else:
                         try:
                             if st.session_state.mode == "live":
                                 db_logic.settle_customer_debt(selected_cust_id, c_settle_amount)
+                                # Append new sale record representing this settlement (routing cash injection)
+                                db_logic.append_sales_record(
+                                    customer_name=selected_cust_row["Customer_Name"],
+                                    customer_phone=selected_cust_row["Customer_Phone"],
+                                    total_amount=0.0,
+                                    amount_paid=c_settle_amount,
+                                    is_credit=False,
+                                    payment_method=selected_settle_method,
+                                    cheque_details=selected_settle_cheque
+                                )
                                 st.success("🎉 Google Sheet updated successfully!")
                             else:
                                 df_s = st.session_state.sales_df
                                 idx = df_s[df_s["ID"] == selected_cust_id].index[0]
                                 df_s.at[idx, "Amount_Paid"] = round(float(df_s.at[idx, "Amount_Paid"]) + c_settle_amount, 2)
                                 df_s.at[idx, "Balance_Due"] = round(float(df_s.at[idx, "Total_Amount"]) - float(df_s.at[idx, "Amount_Paid"]), 2)
+                                
+                                # Append new mock settlement record
+                                tx_id = f"tx-s-mock-settle-{uuid.uuid4().hex[:4]}"
+                                new_entry = {
+                                    "Date": datetime.date.today(),
+                                    "Customer_Name": selected_cust_row["Customer_Name"],
+                                    "Customer_Phone": selected_cust_row["Customer_Phone"],
+                                    "Total_Amount": 0.0,
+                                    "Amount_Paid": c_settle_amount,
+                                    "Balance_Due": 0.0,
+                                    "ID": tx_id,
+                                    "Type": "Cash",
+                                    "Payment_Method": selected_settle_method,
+                                    "Cheque_Details": selected_settle_cheque
+                                }
+                                st.session_state.sales_df = pd.concat([df_s, pd.DataFrame([new_entry])], ignore_index=True)
                                 st.success("🎉 Sandbox updated successfully!")
                             load_udharo_data(force=True)
                             st.rerun()
@@ -1249,14 +1391,41 @@ else:
                 with col_btn2:
                     if st.button("✅ Clear Debt", type="primary", use_container_width=True):
                         try:
+                            remaining_debt = float(selected_cust_row["Balance_Due"])
                             if st.session_state.mode == "live":
                                 db_logic.clear_customer_debt(selected_cust_id)
+                                # Append new sale record representing this settlement (routing cash injection)
+                                db_logic.append_sales_record(
+                                    customer_name=selected_cust_row["Customer_Name"],
+                                    customer_phone=selected_cust_row["Customer_Phone"],
+                                    total_amount=0.0,
+                                    amount_paid=remaining_debt,
+                                    is_credit=False,
+                                    payment_method=selected_settle_method,
+                                    cheque_details=selected_settle_cheque
+                                )
                                 st.success("🎉 Debt fully cleared in Google Sheet!")
                             else:
                                 df_s = st.session_state.sales_df
                                 idx = df_s[df_s["ID"] == selected_cust_id].index[0]
                                 df_s.at[idx, "Amount_Paid"] = df_s.at[idx, "Total_Amount"]
                                 df_s.at[idx, "Balance_Due"] = 0.0
+                                
+                                # Append new mock settlement record
+                                tx_id = f"tx-s-mock-settle-{uuid.uuid4().hex[:4]}"
+                                new_entry = {
+                                    "Date": datetime.date.today(),
+                                    "Customer_Name": selected_cust_row["Customer_Name"],
+                                    "Customer_Phone": selected_cust_row["Customer_Phone"],
+                                    "Total_Amount": 0.0,
+                                    "Amount_Paid": remaining_debt,
+                                    "Balance_Due": 0.0,
+                                    "ID": tx_id,
+                                    "Type": "Cash",
+                                    "Payment_Method": selected_settle_method,
+                                    "Cheque_Details": selected_settle_cheque
+                                }
+                                st.session_state.sales_df = pd.concat([df_s, pd.DataFrame([new_entry])], ignore_index=True)
                                 st.success("🎉 Debt fully cleared in Sandbox!")
                             load_udharo_data(force=True)
                             st.rerun()
@@ -1307,61 +1476,87 @@ else:
             else:
                 st.info("🎉 Excellent! We owe no money to any suppliers.")
                 
-            # Expandable form to add new Purchases entry (Cash or Credit/Udharo)
-            with st.expander("➕ Record New Supplier Purchase (Cash or Udharo)"):
-                with st.form("new_purchase_form", clear_on_submit=True):
-                    col_fp1, col_fp2 = st.columns(2)
-                    with col_fp1:
-                        p_name = st.text_input("Supplier Name *")
-                        p_phone = st.text_input("Supplier Phone")
-                        p_date = st.date_input("Purchase Date", value=datetime.date.today())
-                    with col_fp2:
-                        p_total = st.number_input("Total Amount (Rs.) *", min_value=0.01, step=100.0, value=1000.0)
-                        p_paid = st.number_input("Amount Paid (Rs.)", min_value=0.00, step=100.0, value=0.0)
-                        p_is_credit = st.checkbox("Purchase on Credit (Udharo)", value=True)
-                        
-                    submit_purchase = st.form_submit_button("💾 Save Supplier Purchase")
+            # Expandable form to add new Purchases entry (with Dynamic UI Logic)
+            with st.expander("➕ Record New Supplier Purchase"):
+                col_fp1, col_fp2 = st.columns(2)
+                with col_fp1:
+                    p_date = st.date_input("Purchase Date", value=datetime.date.today(), key="purchase_date_input")
+                    p_method = st.selectbox(
+                        "Payment Method *",
+                        options=['Cash', 'Cheque', 'Fonepay', 'eSewa', 'Khalti', 'Bank Transfer', 'Udharo'],
+                        index=6,  # Default to Udharo for supplier obligations context
+                        key="purchase_payment_method"
+                    )
                     
-                    if submit_purchase:
-                        if not p_name.strip():
-                            st.error("❌ Supplier Name is required!")
-                        elif p_paid > p_total:
-                            st.error("❌ Amount Paid cannot be greater than Total Amount!")
-                        else:
-                            try:
-                                if st.session_state.mode == "live":
-                                    db_logic.append_purchases_record(
-                                        supplier_name=p_name,
-                                        supplier_phone=p_phone,
-                                        total_amount=p_total,
-                                        amount_paid=p_paid,
-                                        is_credit=p_is_credit,
-                                        date=p_date
-                                    )
-                                    st.success(f"🎉 Successfully recorded purchase to Google Sheets!")
-                                else:
-                                    # Sandbox mock append
-                                    tx_id = f"tx-p-mock-{uuid.uuid4().hex[:4]}"
-                                    total_val = round(float(p_total), 2)
-                                    paid_val = round(float(p_paid), 2)
-                                    due_val = round(total_val - paid_val, 2)
-                                    tx_type = "Udharo" if p_is_credit else "Cash"
-                                    new_entry = {
-                                        "Date": p_date,
-                                        "Supplier_Name": p_name.strip(),
-                                        "Supplier_Phone": p_phone.strip(),
-                                        "Total_Amount": total_val,
-                                        "Amount_Paid": paid_val,
-                                        "Balance_Due": due_val,
-                                        "ID": tx_id,
-                                        "Type": tx_type
-                                    }
-                                    st.session_state.purchases_df = pd.concat([purchases_df, pd.DataFrame([new_entry])], ignore_index=True)
-                                    st.success(f"🎉 Successfully recorded purchase to Sandbox memory!")
-                                load_udharo_data(force=True)
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Failed to record purchase: {e}")
+                    # Optional Cheque Number & Bank Name
+                    p_cheque_details = ""
+                    if p_method == "Cheque":
+                        p_cheque_details = st.text_input("Cheque Number & Bank Name (Optional)", placeholder="E.g., Cheque #112233 - Himalayan Bank", key="purchase_cheque_details")
+                    
+                    # Required Supplier Name and Phone Number only for Udharo
+                    if p_method == "Udharo":
+                        p_name = st.text_input("Supplier Name *", key="purchase_supp_name")
+                        p_phone = st.text_input("Supplier Phone Number *", key="purchase_supp_phone")
+                    else:
+                        p_name = st.text_input("Supplier Name (Optional)", value="Standard Supplier", key="purchase_supp_name")
+                        p_phone = st.text_input("Supplier Phone (Optional)", value="N/A", key="purchase_supp_phone")
+
+                with col_fp2:
+                    p_total = st.number_input("Total Amount (Rs.) *", min_value=0.01, step=100.0, value=1000.0, key="purchase_total_amount")
+                    if p_method == "Udharo":
+                        p_paid = st.number_input("Amount Paid (Rs.)", min_value=0.00, step=100.0, value=0.0, key="purchase_amount_paid")
+                    else:
+                        p_paid = p_total # Automatically fully paid for non-credit purchases
+                        st.info(f"ℹ️ Amount Paid automatically set to Total Amount (Rs. {p_total:,.2f}) for non-Udharo purchases.")
+
+                submit_purchase = st.button("💾 Save Supplier Purchase", type="primary", use_container_width=True, key="save_purchase_btn")
+                
+                if submit_purchase:
+                    if p_method == "Udharo" and (not p_name.strip() or not p_phone.strip()):
+                        st.error("❌ Supplier Name and Phone Number are required for credit purchases (Udharo)!")
+                    elif not p_name.strip():
+                        st.error("❌ Supplier Name cannot be empty!")
+                    elif p_paid > p_total:
+                        st.error("❌ Amount Paid cannot be greater than Total Amount!")
+                    else:
+                        try:
+                            if st.session_state.mode == "live":
+                                db_logic.append_purchases_record(
+                                    supplier_name=p_name,
+                                    supplier_phone=p_phone,
+                                    total_amount=p_total,
+                                    amount_paid=p_paid,
+                                    is_credit=(p_method == "Udharo"),
+                                    date=p_date,
+                                    payment_method=p_method,
+                                    cheque_details=p_cheque_details
+                                )
+                                st.success(f"🎉 Successfully recorded purchase to Google Sheets!")
+                            else:
+                                # Sandbox mock append
+                                tx_id = f"tx-p-mock-{uuid.uuid4().hex[:4]}"
+                                total_val = round(float(p_total), 2)
+                                paid_val = round(float(p_paid), 2)
+                                due_val = round(total_val - paid_val, 2)
+                                tx_type = "Udharo" if (p_method == "Udharo") else "Cash"
+                                new_entry = {
+                                    "Date": p_date,
+                                    "Supplier_Name": p_name.strip(),
+                                    "Supplier_Phone": p_phone.strip(),
+                                    "Total_Amount": total_val,
+                                    "Amount_Paid": paid_val,
+                                    "Balance_Due": due_val,
+                                    "ID": tx_id,
+                                    "Type": tx_type,
+                                    "Payment_Method": p_method,
+                                    "Cheque_Details": p_cheque_details
+                                }
+                                st.session_state.purchases_df = pd.concat([st.session_state.purchases_df, pd.DataFrame([new_entry])], ignore_index=True)
+                                st.success(f"🎉 Successfully recorded purchase to Sandbox memory!")
+                            load_udharo_data(force=True)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to record purchase: {e}")
                                 
         with col_p_right:
             st.markdown("### 🏢 Debt Payments")
@@ -1378,6 +1573,18 @@ else:
                 selected_supp_id = selected_supp_opt.split(" - ")[0]
                 selected_supp_row = outstanding_supps[outstanding_supps["ID"] == selected_supp_id].iloc[0]
                 
+                # Settle payment method dropdown
+                selected_supp_settle_method = st.selectbox(
+                    "Settlement Method *",
+                    options=['Cash', 'Cheque', 'Fonepay', 'eSewa', 'Khalti', 'Bank Transfer'],
+                    index=0,
+                    key="supp_settle_method"
+                )
+                
+                selected_supp_settle_cheque = ""
+                if selected_supp_settle_method == "Cheque":
+                    selected_supp_settle_cheque = st.text_input("Cheque Details (Optional)", placeholder="E.g., Cheque #45456 - Nepal Bank", key="supp_settle_cheque_details")
+                
                 p_settle_amount = st.number_input(
                     "Amount Paid (Rs.)", 
                     min_value=0.01, 
@@ -1393,12 +1600,38 @@ else:
                         try:
                             if st.session_state.mode == "live":
                                 db_logic.settle_supplier_debt(selected_supp_id, p_settle_amount)
+                                # Append new purchases record representing this settlement (routing cash outflow)
+                                db_logic.append_purchases_record(
+                                    supplier_name=selected_supp_row["Supplier_Name"],
+                                    supplier_phone=selected_supp_row["Supplier_Phone"],
+                                    total_amount=0.0,
+                                    amount_paid=p_settle_amount,
+                                    is_credit=False,
+                                    payment_method=selected_supp_settle_method,
+                                    cheque_details=selected_supp_settle_cheque
+                                )
                                 st.success("🎉 Google Sheet updated successfully!")
                             else:
                                 df_p = st.session_state.purchases_df
                                 idx = df_p[df_p["ID"] == selected_supp_id].index[0]
                                 df_p.at[idx, "Amount_Paid"] = round(float(df_p.at[idx, "Amount_Paid"]) + p_settle_amount, 2)
                                 df_p.at[idx, "Balance_Due"] = round(float(df_p.at[idx, "Total_Amount"]) - float(df_p.at[idx, "Amount_Paid"]), 2)
+                                
+                                # Append new mock settlement record
+                                tx_id = f"tx-p-mock-settle-{uuid.uuid4().hex[:4]}"
+                                new_entry = {
+                                    "Date": datetime.date.today(),
+                                    "Supplier_Name": selected_supp_row["Supplier_Name"],
+                                    "Supplier_Phone": selected_supp_row["Supplier_Phone"],
+                                    "Total_Amount": 0.0,
+                                    "Amount_Paid": p_settle_amount,
+                                    "Balance_Due": 0.0,
+                                    "ID": tx_id,
+                                    "Type": "Cash",
+                                    "Payment_Method": selected_supp_settle_method,
+                                    "Cheque_Details": selected_supp_settle_cheque
+                                }
+                                st.session_state.purchases_df = pd.concat([df_p, pd.DataFrame([new_entry])], ignore_index=True)
                                 st.success("🎉 Sandbox updated successfully!")
                             load_udharo_data(force=True)
                             st.rerun()
@@ -1408,14 +1641,41 @@ else:
                 with col_pbtn2:
                     if st.button("✅ Clear Obligation", type="primary", use_container_width=True, key="supp_clear_pay_btn"):
                         try:
+                            remaining_obligation = float(selected_supp_row["Balance_Due"])
                             if st.session_state.mode == "live":
                                 db_logic.clear_supplier_debt(selected_supp_id)
+                                # Append new purchases record representing this settlement (routing cash outflow)
+                                db_logic.append_purchases_record(
+                                    supplier_name=selected_supp_row["Supplier_Name"],
+                                    supplier_phone=selected_supp_row["Supplier_Phone"],
+                                    total_amount=0.0,
+                                    amount_paid=remaining_obligation,
+                                    is_credit=False,
+                                    payment_method=selected_supp_settle_method,
+                                    cheque_details=selected_supp_settle_cheque
+                                )
                                 st.success("🎉 Debt fully cleared in Google Sheet!")
                             else:
                                 df_p = st.session_state.purchases_df
                                 idx = df_p[df_p["ID"] == selected_supp_id].index[0]
                                 df_p.at[idx, "Amount_Paid"] = df_p.at[idx, "Total_Amount"]
                                 df_p.at[idx, "Balance_Due"] = 0.0
+                                
+                                # Append new mock settlement record
+                                tx_id = f"tx-p-mock-settle-{uuid.uuid4().hex[:4]}"
+                                new_entry = {
+                                    "Date": datetime.date.today(),
+                                    "Supplier_Name": selected_supp_row["Supplier_Name"],
+                                    "Supplier_Phone": selected_supp_row["Supplier_Phone"],
+                                    "Total_Amount": 0.0,
+                                    "Amount_Paid": remaining_obligation,
+                                    "Balance_Due": 0.0,
+                                    "ID": tx_id,
+                                    "Type": "Cash",
+                                    "Payment_Method": selected_supp_settle_method,
+                                    "Cheque_Details": selected_supp_settle_cheque
+                                }
+                                st.session_state.purchases_df = pd.concat([df_p, pd.DataFrame([new_entry])], ignore_index=True)
                                 st.success("🎉 Debt fully cleared in Sandbox!")
                             load_udharo_data(force=True)
                             st.rerun()

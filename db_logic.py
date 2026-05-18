@@ -7,11 +7,11 @@ from streamlit_gsheets import GSheetsConnection
 
 DEFAULT_COLUMNS = ["ID", "Date", "Description", "Category", "Type", "Amount"]
 
-# Sales Sheet Columns: [Date, Customer_Name, Customer_Phone, Total_Amount, Amount_Paid, Balance_Due, ID, Type]
-SALES_COLUMNS = ["Date", "Customer_Name", "Customer_Phone", "Total_Amount", "Amount_Paid", "Balance_Due", "ID", "Type"]
+# Sales Sheet Columns: [Date, Customer_Name, Customer_Phone, Total_Amount, Amount_Paid, Balance_Due, ID, Type, Payment_Method, Cheque_Details]
+SALES_COLUMNS = ["Date", "Customer_Name", "Customer_Phone", "Total_Amount", "Amount_Paid", "Balance_Due", "ID", "Type", "Payment_Method", "Cheque_Details"]
 
-# Purchases Sheet Columns: [Date, Supplier_Name, Supplier_Phone, Total_Amount, Amount_Paid, Balance_Due, ID, Type]
-PURCHASES_COLUMNS = ["Date", "Supplier_Name", "Supplier_Phone", "Total_Amount", "Amount_Paid", "Balance_Due", "ID", "Type"]
+# Purchases Sheet Columns: [Date, Supplier_Name, Supplier_Phone, Total_Amount, Amount_Paid, Balance_Due, ID, Type, Payment_Method, Cheque_Details]
+PURCHASES_COLUMNS = ["Date", "Supplier_Name", "Supplier_Phone", "Total_Amount", "Amount_Paid", "Balance_Due", "ID", "Type", "Payment_Method", "Cheque_Details"]
 
 def get_connection():
     """
@@ -217,6 +217,8 @@ def fetch_sales_sheet() -> pd.DataFrame:
         df["Customer_Name"] = df["Customer_Name"].fillna("Unknown Customer")
         df["Customer_Phone"] = df["Customer_Phone"].fillna("").astype(str).str.replace(r"\.0$", "", regex=True)
         df["Type"] = df["Type"].fillna("Udharo")
+        df["Payment_Method"] = df["Payment_Method"].fillna(df.apply(lambda row: "Udharo" if row["Type"] == "Udharo" else "Cash", axis=1))
+        df["Cheque_Details"] = df["Cheque_Details"].fillna("")
         
         return df
     except Exception:
@@ -225,7 +227,7 @@ def fetch_sales_sheet() -> pd.DataFrame:
 def fetch_purchases_sheet() -> pd.DataFrame:
     """
     Fetches the entire 'Purchases' worksheet (Supplier Udharo Tracker).
-    Columns: [Date, Supplier_Name, Supplier_Phone, Total_Amount, Amount_Paid, Balance_Due, ID, Type]
+    Columns: [Date, Supplier_Name, Supplier_Phone, Total_Amount, Amount_Paid, Balance_Due, ID, Type, Payment_Method, Cheque_Details]
     """
     if not validate_sheet_exists():
         return pd.DataFrame(columns=PURCHASES_COLUMNS)
@@ -251,12 +253,14 @@ def fetch_purchases_sheet() -> pd.DataFrame:
         df["Supplier_Name"] = df["Supplier_Name"].fillna("Unknown Supplier")
         df["Supplier_Phone"] = df["Supplier_Phone"].fillna("").astype(str).str.replace(r"\.0$", "", regex=True)
         df["Type"] = df["Type"].fillna("Udharo")
+        df["Payment_Method"] = df["Payment_Method"].fillna(df.apply(lambda row: "Udharo" if row["Type"] == "Udharo" else "Cash", axis=1))
+        df["Cheque_Details"] = df["Cheque_Details"].fillna("")
         
         return df
     except Exception:
         return pd.DataFrame(columns=PURCHASES_COLUMNS)
 
-def append_sales_record(customer_name: str, customer_phone: str, total_amount: float, amount_paid: float, is_credit: bool = True, date=None, tx_id=None) -> pd.DataFrame:
+def append_sales_record(customer_name: str, customer_phone: str, total_amount: float, amount_paid: float, is_credit: bool = True, date=None, tx_id=None, payment_method: str = "Udharo", cheque_details: str = "") -> pd.DataFrame:
     """
     Appends a new record to the 'Sales' worksheet.
     Balance_Due is auto-computed as: Total_Amount - Amount_Paid
@@ -282,7 +286,7 @@ def append_sales_record(customer_name: str, customer_phone: str, total_amount: f
     total_val = round(float(total_amount), 2)
     paid_val = round(float(amount_paid), 2)
     due_val = round(total_val - paid_val, 2)
-    tx_type = "Udharo" if is_credit else "Cash"
+    tx_type = "Udharo" if (payment_method == "Udharo") else "Cash"
     
     new_entry = {
         "Date": date_str,
@@ -292,7 +296,9 @@ def append_sales_record(customer_name: str, customer_phone: str, total_amount: f
         "Amount_Paid": paid_val,
         "Balance_Due": due_val,
         "ID": tx_id,
-        "Type": tx_type
+        "Type": tx_type,
+        "Payment_Method": payment_method,
+        "Cheque_Details": cheque_details
     }
     
     updated_df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
@@ -301,7 +307,7 @@ def append_sales_record(customer_name: str, customer_phone: str, total_amount: f
     conn.update(worksheet="Sales", data=updated_df)
     return updated_df
 
-def append_purchases_record(supplier_name: str, supplier_phone: str, total_amount: float, amount_paid: float, is_credit: bool = True, date=None, tx_id=None) -> pd.DataFrame:
+def append_purchases_record(supplier_name: str, supplier_phone: str, total_amount: float, amount_paid: float, is_credit: bool = True, date=None, tx_id=None, payment_method: str = "Udharo", cheque_details: str = "") -> pd.DataFrame:
     """
     Appends a new record to the 'Purchases' worksheet.
     Balance_Due is auto-computed as: Total_Amount - Amount_Paid
@@ -327,7 +333,7 @@ def append_purchases_record(supplier_name: str, supplier_phone: str, total_amoun
     total_val = round(float(total_amount), 2)
     paid_val = round(float(amount_paid), 2)
     due_val = round(total_val - paid_val, 2)
-    tx_type = "Udharo" if is_credit else "Cash"
+    tx_type = "Udharo" if (payment_method == "Udharo") else "Cash"
     
     new_entry = {
         "Date": date_str,
@@ -337,7 +343,9 @@ def append_purchases_record(supplier_name: str, supplier_phone: str, total_amoun
         "Amount_Paid": paid_val,
         "Balance_Due": due_val,
         "ID": tx_id,
-        "Type": tx_type
+        "Type": tx_type,
+        "Payment_Method": payment_method,
+        "Cheque_Details": cheque_details
     }
     
     updated_df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
